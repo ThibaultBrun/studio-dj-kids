@@ -18,9 +18,20 @@ WHISPER_DIR = HOME / ".local/share/whisper.cpp"
 WHISPER = WHISPER_DIR / "build/bin/whisper-cli"
 WHISPER_MODEL = WHISPER_DIR / "models/ggml-small.bin"
 # Aide Whisper à reconnaître les noms des logiciels
-WHISPER_PROMPT = ("Bip, Mixxx, Ma Musique, Scratch, Tux Paint, TuxMath, BeepBox, Song Maker, Music Lab, "
+BASE_PROMPT = ("Bip, Mixxx, Ma Musique, Scratch, Tux Paint, TuxMath, BeepBox, Song Maker, Music Lab, "
                   "GCompris, KTouch, Stellarium, KGeography, Marble, KTurtle, Blinken, Vikidia, Lumni, "
                   "platine, crossfader, BPM, sync.")
+KNOWN_ARTISTS = ["Daft Punk", "Red Hot Chili Peppers", "Stromae", "Orelsan", "Angèle", "Aya Nakamura", "Michael Jackson",
+                 "Bee Gees", "Kool & The Gang", "Earth, Wind & Fire", "David Guetta", "Bigflo et Oli", "Soprano", "Vianney"]
+MUSIC_DIR = HOME / "Musique"
+
+
+def whisper_prompt():
+    """Vocabulaire donné à Whisper : logiciels + artistes connus + artistes déjà dans sa musique."""
+    artists = list(dict.fromkeys(KNOWN_ARTISTS + [p.stem.split(" - ")[0] for p in MUSIC_DIR.glob("*.mp3")]))
+    return BASE_PROMPT + " " + ", ".join(artists[:40]) + "."
+
+
 # Phrases que Whisper invente parfois quand il n'entend que du bruit
 HALLUCINATIONS = re.compile(r"sous-titr|amara|merci d'avoir regard|abonnez-vous|radio-canada", re.IGNORECASE)
 MIN_RECORD_SECONDS = 0.6
@@ -165,7 +176,7 @@ class Listener(QObject):
         self.stt_proc.finished.connect(self.transcribed)
         self.stt_proc.start(str(WHISPER), [
             "-m", str(WHISPER_MODEL), "-l", "fr", "-t", str(os.cpu_count() or 4),
-            "-nt", "-np", "--prompt", WHISPER_PROMPT, "-f", str(self.wav),
+            "-nt", "-np", "--prompt", whisper_prompt(), "-f", str(self.wav),
             # Whisper analyse 30 s d'audio par défaut (1500) : on réduit à la durée réelle, 3x plus rapide
             "-ac", str(min(1500, max(448, int((seconds + 4) * 50 / 64 + 1) * 64))),
         ])

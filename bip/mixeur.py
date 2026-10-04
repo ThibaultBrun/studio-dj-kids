@@ -37,7 +37,15 @@ STOP_REQUEST = re.compile(r"\b(arrete|stop|stoppe|coupe)\b.*\b(musique|mix|tout|
 YES = re.compile(r"^\s*(oui|ouais|ok|okay|vas[- ]y|d'?accord|go|c'?est bon|yes|super)\b")
 NO = re.compile(r"^\s*(non|nan|pas ca|annule|stop)\b")
 SONGS_AFTER_MIX = re.compile(r"\b(?:(?:re)?mix\w*|m[ée]lang\w*)\s+(.+)$", re.IGNORECASE)
-LEADING_WORDS = re.compile(r"^(?:-?moi|un|une|le|la|les|de|du|des|d'|entre|avec)\s+", re.IGNORECASE)
+LEADING_WORDS = re.compile(
+    r"^(?:-?moi|un|une|le|la|les|de|du|des|d'|entre|avec|chansons?|musiques?|sons?|morceaux?|titres?)\s+", re.IGNORECASE)
+
+
+def strip_leading_words(text):
+    """« une chanson des Daft Punk » -> « Daft Punk » (YouTube trouve alors un titre connu de l'artiste)."""
+    while LEADING_WORDS.match(text):
+        text = LEADING_WORDS.sub("", text, count=1)
+    return text
 SONG_SEPARATOR = re.compile(r"\s+(?:et|puis|avec)\s+", re.IGNORECASE)
 STOPWORDS = {"de", "des", "du", "la", "le", "les", "the", "et", "un", "une", "chanson", "musique", "son", "official", "video", "clip"}
 
@@ -57,8 +65,8 @@ def is_mix_request(text):
     if MIX_REQUEST.search(q):
         return True
     # La reconnaissance vocale abîme souvent le verbe (« je vous réactivé par un Mixxx hip-hop ») :
-    # « mix » + un style connu ou « avec » suffit
-    return bool(re.search(rf"\b({MIX_WORD})", q) and (find_ambiance(text) or re.search(r"\bavec\b", q)))
+    # « mix » + un style connu, « avec » ou « et » suffit
+    return bool(re.search(rf"\b({MIX_WORD})", q) and (find_ambiance(text) or re.search(r"\b(avec|et)\b", q)))
 
 
 def is_transition_request(text):
@@ -121,10 +129,7 @@ def songs_in_request(text):
     match = SONGS_AFTER_MIX.search(text.strip().rstrip(" !?."))
     if not match:
         return []
-    rest = match.group(1)
-    while LEADING_WORDS.match(rest):
-        rest = LEADING_WORDS.sub("", rest, count=1)
-    songs = [part.strip(" «»\"',") for part in SONG_SEPARATOR.split(rest)]
+    songs = [strip_leading_words(part.strip(" «»\"',")) for part in SONG_SEPARATOR.split(match.group(1))]
     return [song for song in songs if song][:2]
 
 

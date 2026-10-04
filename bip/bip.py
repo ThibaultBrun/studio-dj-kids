@@ -378,6 +378,7 @@ class Bip(QWidget):
         self.resolver.deleteLater()
         self.set_busy(False)
         self.bip_says(message, replace=True)
+        self.log("Bip", message)
 
     def propose_mix(self, mode, items):
         self.pending_mix = (mode, items)
@@ -388,6 +389,7 @@ class Bip(QWidget):
             text = (f"Je mets « {items[0]['name']} » sur la platine de gauche "
                     f"et « {items[1]['name']} » sur la platine de droite. C'est bon ?")
         self.bip_says(text, replace=True)
+        self.log("Bip", text)
         self.show_confirm(True)
 
     def answer_mix(self, yes, echo=True):
@@ -399,7 +401,8 @@ class Bip(QWidget):
         if echo:
             self.user_says("Oui !" if yes else "Non")
         if not yes:
-            self.bip_says("D'accord ! Demande-moi un autre mix quand tu veux 😉")
+            self.bip_says("D'accord ! Tu peux m'écrire les noms des chansons dans la case en bas, "
+                          "je comprendrai mieux qu'à l'oral 😉 Par exemple : fais un mix avec Get Lucky et Californication.")
             return
         self.set_busy(True)
         self.bip_says("🎛 C'est parti, je prépare ton mix !")
