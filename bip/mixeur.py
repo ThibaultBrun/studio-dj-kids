@@ -28,9 +28,10 @@ MAX_TRIES = 3
 MAX_DURATION = 15 * 60
 
 MIX_WORD = r"(?:re)?mix\w*|melang\w*"
+MIX_VERB = r"(?:re)?mix(?:e|er|ez)|melang\w*"  # « mixe… » mais pas « Mixxx… » (le logiciel)
 MIX_REQUEST = re.compile(
     r"\b(fai[st]?|faire|lance[rz]?|commence[rz]?|on commence|prepare[rz]?|veux|voudrais|demarre[rz]?|on fait|cree[rz]?)\b"
-    rf".*\b({MIX_WORD})|^\s*(bip\W*)?({MIX_WORD})\b", re.IGNORECASE)
+    rf".*\b({MIX_WORD})|^\s*(bip\W*)?({MIX_VERB})\b", re.IGNORECASE)
 TRANSITION_REQUEST = re.compile(r"\b(enchaine|enchainer|transition|passe a la (deuxieme|2)|lance la (deuxieme|platine 2))\b")
 STOP_REQUEST = re.compile(r"\b(arrete|stop|stoppe|coupe)\b.*\b(musique|mix|tout|son)\b|^stop\b")
 YES = re.compile(r"^\s*(oui|ouais|ok|okay|vas[- ]y|d'?accord|go|c'?est bon|yes|super)\b")
@@ -46,8 +47,18 @@ def normalize(text):
     return "".join(c for c in text if unicodedata.category(c) != "Mn")
 
 
+QUESTION = re.compile(r"\b(comment|c'?est quoi|pourquoi|ou est|ou se trouve|quel|quelle|explique|ca veut dire)\b")
+
+
 def is_mix_request(text):
-    return bool(MIX_REQUEST.search(normalize(text)))
+    q = normalize(text).replace("-", " ")
+    if QUESTION.search(q):  # « comment on mixe ? » est une question, pas une demande
+        return False
+    if MIX_REQUEST.search(q):
+        return True
+    # La reconnaissance vocale abîme souvent le verbe (« je vous réactivé par un Mixxx hip-hop ») :
+    # « mix » + un style connu ou « avec » suffit
+    return bool(re.search(rf"\b({MIX_WORD})", q) and (find_ambiance(text) or re.search(r"\bavec\b", q)))
 
 
 def is_transition_request(text):
