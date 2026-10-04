@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Apprendre les beats
+Comment=Apprendre à faire de la musique avec Ableton Learning Music
+Exec=xdg-open https://learningmusic.ableton.com/fr/
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/ableton.svg
+Terminal=false
+Categories=AudioVideo;Audio;

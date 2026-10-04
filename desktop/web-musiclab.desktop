@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Music Lab
+Comment=Plein de jeux musicaux de Chrome Music Lab
+Exec=xdg-open https://musiclab.chromeexperiments.com/
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/musiclab.svg
+Terminal=false
+Categories=AudioVideo;Audio;

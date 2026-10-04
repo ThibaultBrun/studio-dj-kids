@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Bip, mon assistant
+Comment=Petit robot qui répond aux questions sur les logiciels
+Exec=python3 /home/djpiloupilou/.local/share/bip/bip.py
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/bip.svg
+Terminal=false
+Categories=Education;
+StartupWMClass=bip

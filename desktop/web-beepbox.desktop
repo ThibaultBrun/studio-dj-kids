@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=BeepBox
+Comment=Faire de la musique de jeu vidéo 8-bit
+Exec=xdg-open https://www.beepbox.co/
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/beepbox.svg
+Terminal=false
+Categories=AudioVideo;Audio;

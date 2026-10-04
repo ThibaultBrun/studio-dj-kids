@@ -1,0 +1,10 @@
+# Données privées (ne jamais publier)
+bip/conversations/
+ma-musique/historique.json
+
+# Gros fichiers téléchargés par install.sh (moteur et voix de synthèse)
+bip/voix/
+
+# Python
+__pycache__/
+*.pyc

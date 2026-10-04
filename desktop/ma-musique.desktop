@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Ma Musique
+Comment=Chercher et télécharger des chansons en MP3
+Exec=python3 /home/djpiloupilou/.local/share/ma-musique/ma_musique.py
+Icon=folder-music
+Terminal=false
+Categories=AudioVideo;Audio;

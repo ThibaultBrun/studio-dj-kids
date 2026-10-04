@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Song Maker
+Comment=Composer de la musique en coloriant une grille
+Exec=xdg-open https://musiclab.chromeexperiments.com/Song-Maker/
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/songmaker.svg
+Terminal=false
+Categories=AudioVideo;Audio;
