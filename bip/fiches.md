@@ -42,7 +42,7 @@
 - Bip peut préparer un mix tout seul : dis-lui « fais un mix avec » puis le nom de deux chansons ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
 - Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
-## LMMS | bureau | lmms, faire des beats, melodie, mélodie, accord, accords, gamme, piano virtuel, note, notes, beat, beats, instru, instrumentale, prod, composer un morceau, grosse caisse, caisse claire, charleston, clap, echantillon, sample
+## LMMS | bureau | lmms, faire des beats, guitare, guitar, piano, violon, instrument, melodie, mélodie, accord, accords, gamme, piano virtuel, note, notes, beat, beats, instru, instrumentale, prod, composer un morceau, grosse caisse, caisse claire, charleston, clap, echantillon, sample
 - LMMS sert à fabriquer des beats et des morceaux, comme les producteurs.
 - L'icône « Faire des beats » sur le bureau ouvre « Mon premier beat » : un beat hip-hop déjà prêt, à 90 BPM.
 - Pour écouter : appuie sur la barre d'espace, ou sur le bouton lecture (le triangle) de la fenêtre « Éditeur de morceau ».
@@ -60,6 +60,11 @@ Mélodie et accords :
 - Pour ne jamais jouer faux : en haut du piano virtuel, choisis une gamme dans la liste (par exemple « minor » avec la note La). Les bonnes notes sont surlignées : « Marquer la gamme actuelle ».
 - Pour voir où poser un accord : choisis un accord dans la liste à côté, puis « Marquer l'accord actuel ».
 - Pour qu'une seule note joue un accord entier : ouvre l'instrument (clic sur son nom), onglet des fonctions, et active « Accords ». L'arpège joue les notes de l'accord l'une après l'autre.
+Guitare :
+- La piste « Guitare » joue les accords note par note (un arpège) avec une vraie guitare folk.
+- Pour changer de guitare : clic sur le nom de la piste « Guitare », puis sur le bouton « Patch » de l'instrument. Choisis par exemple « Nylon String Guitar » (classique), « Steel String Guitar » (folk), « Clean Guitar » (électrique) ou « Distortion Guitar » (rock).
+- La même banque contient aussi des pianos, des violons, une batterie, des cuivres… Il suffit de changer le « Patch ».
+- Pour ajouter une autre guitare : fais glisser l'instrument « Sf2 Player » de la liste à gauche dans l'« Éditeur de morceau », puis choisis le « Patch ».
 - Pour changer de son : à gauche, ouvre la liste des instruments et fais glisser un instrument (par exemple « LB302 » pour une basse, « Sf2 Player » pour un vrai piano) dans l'« Éditeur de morceau ».
 
 ## Hydrogen | bureau | hydrogen, boite a rythmes, boîte à rythmes, batterie, drum
