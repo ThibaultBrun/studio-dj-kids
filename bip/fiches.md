@@ -57,7 +57,8 @@
 - À gauche de chaque ligne : l'instrument, le bouton pour couper la ligne et le volume.
 - Pour la batterie, choisis une « Vraie batterie » (pop / rock, rock, jazz ou vintage) : ce sont de vraies batteries enregistrées. « Batterie électro » et « Boîte à rythmes 808 » sont pour l'électro et le rap.
 - « 🎧 Exporter vers Mixxx » transforme le morceau en musique : il arrive dans le dossier « Mes créations » et dans Mixxx.
-- « 💾 Enregistrer » garde le morceau pour le modifier plus tard avec « 📂 Ouvrir ».
+- « 💾 Sauvegarder » garde le morceau pour le modifier plus tard avec « 📂 Ouvrir ».
+- Les instruments sont de vrais instruments enregistrés : essaie le Piano, les Cordes, le Chœur ou les Cuivres pour les accords, et le Saxophone ou le Violon pour la mélodie.
 - On peut jouer avec le clavier de l'ordinateur : choisis une ligne (Batterie, Basse, Accords ou Mélodie), puis appuie sur Q, S, D, F, G, H, J, K, L, M. La lettre de chaque touche est écrite devant la ligne de la grille. Pour la mélodie, A Z E R T Y U I O P jouent plus aigu.
 - Pour garder ce que tu joues au clavier : clique sur « ⏺ Enregistrer », le motif tourne en boucle et tes notes s'inscrivent dans la grille.
 - La barre d'espace lance ou arrête la musique.

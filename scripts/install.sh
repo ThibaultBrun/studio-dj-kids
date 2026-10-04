@@ -15,7 +15,7 @@ as_child() { sudo -u "$CHILD" -H bash -c "$1"; }
 
 echo ">> Paquets"
 apt-get install -y -qq mixxx ffmpeg curl unzip git build-essential cmake alsa-utils \
-    python3-pyqt6 python3-mutagen libfluidsynth3 fluid-soundfont-gm avldrums.lv2-soundfont \
+    python3-pyqt6 python3-mutagen libfluidsynth3 fluid-soundfont-gm avldrums.lv2-soundfont musescore-general-soundfont-lossless \
     lmms hydrogen gcompris-qt tuxpaint tuxmath ktouch stellarium kgeography marble kturtle khangman blinken
 
 echo ">> Port MIDI virtuel pour que Bip pilote Mixxx"
