@@ -42,7 +42,7 @@
 - Bip peut préparer un mix tout seul : dis-lui « fais un mix avec » puis le nom de deux chansons ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
 - Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
-## Mon Studio | bureau | mon studio, studio, clavier, touche, touches, enregistrer, jouer en direct, defi, défi, defis, défis, exercice, lecon, leçon, composer, morceau, ligne de temps, motif, motifs, basse, melodie, mélodie, exporter, mes creations, mes créations
+## Mon Studio | bureau | mon studio, studio, swing, humain, accent, annuler, retour en arriere, clavier, touche, touches, enregistrer, jouer en direct, defi, défi, defis, défis, exercice, lecon, leçon, composer, morceau, ligne de temps, motif, motifs, basse, melodie, mélodie, exporter, mes creations, mes créations
 - Mon Studio sert à composer un morceau avec 4 lignes : Batterie, Basse, Accords et Mélodie.
 - En haut, la ligne de temps : 16 mesures. Chaque bloc de couleur est un motif (A, B, C…) qui joue à cet endroit.
 - Pour placer un motif : clique sur le motif en bas (par exemple « A · Boom bap »), puis clique dans la ligne de temps. Tu peux glisser pour en mettre plusieurs. Clic droit pour enlever.
@@ -60,6 +60,11 @@
 - On peut jouer avec le clavier de l'ordinateur : choisis une ligne (Batterie, Basse, Accords ou Mélodie), puis appuie sur Q, S, D, F, G, H, J, K, L, M. La lettre de chaque touche est écrite devant la ligne de la grille. Pour la mélodie, A Z E R T Y U I O P jouent plus aigu.
 - Pour garder ce que tu joues au clavier : clique sur « ⏺ Enregistrer », le motif tourne en boucle et tes notes s'inscrivent dans la grille.
 - La barre d'espace lance ou arrête la musique.
+- Clic droit sur une case allumée : le coup devient fort (▲), puis doux (▽), puis normal. Ça rend la batterie plus vivante.
+- Le curseur « Swing » fait balancer le rythme, comme en hip-hop. Essaie entre 20 et 40 %.
+- Le curseur « Humain » ajoute de petites imperfections, comme un vrai musicien. À 0, ça sonne comme un robot.
+- Tu t'es trompé ? Le bouton ↩ (ou Ctrl+Z) annule, ↪ (ou Ctrl+Y) refait.
+- Ton morceau est sauvegardé tout seul : il revient quand tu rouvres Mon Studio.
 - « 🏆 Défis » ouvre 12 petits défis pour apprendre, à faire dans l'ordre : écoute le modèle avec « 🎧 Écouter le modèle », recopie-le dans la grille, puis clique sur « ✅ J'ai fini, vérifie ! ». Si tu bloques, clique sur « 💡 Un indice ».
 - Les défis « À toi de créer » n'ont pas de bonne réponse unique : il faut juste respecter la consigne.
 - « 🚪 Quitter les défis » te ramène à ton morceau.
