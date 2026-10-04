@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Scratch
+Comment=Créer des jeux et des animations en assemblant des blocs
+Exec=xdg-open https://scratch.mit.edu/projects/editor/
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/scratch.svg
+Terminal=false
+Categories=Education;

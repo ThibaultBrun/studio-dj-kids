@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Vikidia
+Comment=L'encyclopédie des 8-13 ans
+Exec=xdg-open https://fr.vikidia.org/
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/vikidia.svg
+Terminal=false
+Categories=Education;

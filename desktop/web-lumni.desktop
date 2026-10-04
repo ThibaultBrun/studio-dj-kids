@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Lumni
+Comment=Vidéos et jeux éducatifs (France Télévisions)
+Exec=xdg-open https://www.lumni.fr/primaire
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/lumni.svg
+Terminal=false
+Categories=Education;
