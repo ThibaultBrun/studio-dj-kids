@@ -55,6 +55,7 @@
 - « 🎁 Morceaux prêts » charge un morceau complet (Hip-hop chill, Pop joyeuse, Électro, Reggaeton) pour commencer.
 - Le Tempo change la vitesse, la Gamme change l'ambiance (mineur = plus triste ou mystérieux, majeur = plus joyeux).
 - À gauche de chaque ligne : l'instrument, le bouton pour couper la ligne et le volume.
+- Pour la batterie, choisis une « Vraie batterie » (pop / rock, rock, jazz ou vintage) : ce sont de vraies batteries enregistrées. « Batterie électro » et « Boîte à rythmes 808 » sont pour l'électro et le rap.
 - « 🎧 Exporter vers Mixxx » transforme le morceau en musique : il arrive dans le dossier « Mes créations » et dans Mixxx.
 - « 💾 Enregistrer » garde le morceau pour le modifier plus tard avec « 📂 Ouvrir ».
 - On peut jouer avec le clavier de l'ordinateur : choisis une ligne (Batterie, Basse, Accords ou Mélodie), puis appuie sur Q, S, D, F, G, H, J, K, L, M. La lettre de chaque touche est écrite devant la ligne de la grille. Pour la mélodie, A Z E R T Y U I O P jouent plus aigu.
