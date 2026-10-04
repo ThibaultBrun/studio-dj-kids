@@ -27,6 +27,10 @@ echo ">> IA locale (Ollama + Gemma 3)"
 command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
 ollama pull gemma3:4b
 
+echo ">> Mon Studio (dépôt séparé)"
+if [ -d /opt/mon-studio/.git ]; then git -C /opt/mon-studio pull -q; else git clone -q https://github.com/ThibaultBrun/mon-studio.git /opt/mon-studio; fi
+chmod -R a+rX /opt/mon-studio
+
 echo ">> Voix de Bip (Piper, voix Tom)"
 VOIX="$REPO/bip/voix"
 mkdir -p "$VOIX"
@@ -61,7 +65,7 @@ set -e
 mkdir -p ~/.local/share/applications ~/.local/share/icons/ma-musique-web ~/.mixxx/controllers \"\$(xdg-user-dir DESKTOP)/Apprendre\"
 ln -sfn '$REPO/ma-musique' ~/.local/share/ma-musique
 ln -sfn '$REPO/bip' ~/.local/share/bip
-ln -sfn '$REPO/mon-studio' ~/.local/share/mon-studio
+ln -sfn /opt/mon-studio ~/.local/share/mon-studio
 cp '$REPO'/icons/*.svg ~/.local/share/icons/ma-musique-web/
 ln -sf '$REPO/mixxx/Bip.midi.xml' '$REPO/mixxx/Bip-scripts.js' ~/.mixxx/controllers/
 "

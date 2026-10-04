@@ -11,7 +11,7 @@ Un PC sous Ubuntu Studio pensé pour un enfant de 9 ans qui veut apprendre à mi
   - **Mix automatique** : « fais un mix avec *Alors on danse* et *One More Time* » ou « fais-moi un mix hip-hop pour scratcher ». Bip trouve ou télécharge les morceaux, ouvre Mixxx, les charge sur les platines et les synchronise. Ensuite : « enchaîne » ou « arrête la musique ».
   - Les styles de mix sont dans `bip/ambiances.md` (beats instrumentaux pour le scratch : pas de paroles inadaptées).
 - **Contrôleur virtuel Mixxx** (`mixxx/`) : Bip pilote Mixxx par un port MIDI virtuel (`snd-virmidi`), comme une console DJ invisible. Il fonctionne en même temps qu'une vraie console (Hercules…).
-- **Mon Studio** (`mon-studio/`) : composer un morceau sur 4 lignes (batterie, basse, accords, mélodie) façon Ableton Learning Music, en appli de bureau. Motifs éditables sur une grille, notes toujours dans la gamme, basse qui suit les accords, motifs et morceaux prêts, lecture en direct (FluidSynth) et export MP3 vers « Mes créations » pour le mixer dans Mixxx.
+- **[Mon Studio](https://github.com/ThibaultBrun/mon-studio)** (dépôt séparé, installé dans `/opt/mon-studio`) : composer un morceau sur 4 lignes (batterie, basse, accords, mélodie) façon Ableton Learning Music, en appli de bureau. Motifs éditables sur une grille, notes toujours dans la gamme, basse qui suit les accords, motifs et morceaux prêts, lecture en direct (FluidSynth) et export MP3 vers « Mes créations » pour le mixer dans Mixxx.
 - **Faire des beats** (`lmms/`) : LMMS s'ouvre sur « Mon premier beat », un beat hip-hop 808 à 90 BPM prêt à modifier (généré par `scripts/make_beat.py`), plus Hydrogen pour débuter.
 - Des raccourcis vers des sites de création musicale et des sites éducatifs (`desktop/`, `icons/`).
 
