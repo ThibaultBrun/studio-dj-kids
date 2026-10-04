@@ -42,7 +42,7 @@
 - Bip peut préparer un mix tout seul : dis-lui « fais un mix avec » puis le nom de deux chansons ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
 - Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
-## Mon Studio | bureau | mon studio, studio, composer, morceau, ligne de temps, motif, motifs, basse, melodie, mélodie, exporter, mes creations, mes créations
+## Mon Studio | bureau | mon studio, studio, defi, défi, defis, défis, exercice, lecon, leçon, composer, morceau, ligne de temps, motif, motifs, basse, melodie, mélodie, exporter, mes creations, mes créations
 - Mon Studio sert à composer un morceau avec 4 lignes : Batterie, Basse, Accords et Mélodie.
 - En haut, la ligne de temps : 16 mesures. Chaque bloc de couleur est un motif (A, B, C…) qui joue à cet endroit.
 - Pour placer un motif : clique sur le motif en bas (par exemple « A · Boom bap »), puis clique dans la ligne de temps. Tu peux glisser pour en mettre plusieurs. Clic droit pour enlever.
@@ -57,6 +57,9 @@
 - À gauche de chaque ligne : l'instrument, le bouton pour couper la ligne et le volume.
 - « 🎧 Exporter vers Mixxx » transforme le morceau en musique : il arrive dans le dossier « Mes créations » et dans Mixxx.
 - « 💾 Enregistrer » garde le morceau pour le modifier plus tard avec « 📂 Ouvrir ».
+- « 🏆 Défis » ouvre 12 petits défis pour apprendre, à faire dans l'ordre : écoute le modèle avec « 🎧 Écouter le modèle », recopie-le dans la grille, puis clique sur « ✅ J'ai fini, vérifie ! ». Si tu bloques, clique sur « 💡 Un indice ».
+- Les défis « À toi de créer » n'ont pas de bonne réponse unique : il faut juste respecter la consigne.
+- « 🚪 Quitter les défis » te ramène à ton morceau.
 
 ## LMMS | bureau | lmms, faire des beats, guitare, guitar, piano, violon, instrument, melodie, mélodie, accord, accords, gamme, piano virtuel, note, notes, beat, beats, instru, instrumentale, prod, composer un morceau, grosse caisse, caisse claire, charleston, clap, echantillon, sample
 - LMMS sert à fabriquer des beats et des morceaux, comme les producteurs.
