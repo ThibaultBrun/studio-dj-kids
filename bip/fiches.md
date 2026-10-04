@@ -42,7 +42,7 @@
 - Bip peut préparer un mix tout seul : dis-lui « fais un mix avec » puis le nom de deux chansons ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
 - Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
-## LMMS | bureau | lmms, faire des beats, beat, beats, instru, instrumentale, prod, composer un morceau, grosse caisse, caisse claire, charleston, clap, echantillon, sample
+## LMMS | bureau | lmms, faire des beats, melodie, mélodie, accord, accords, gamme, piano virtuel, note, notes, beat, beats, instru, instrumentale, prod, composer un morceau, grosse caisse, caisse claire, charleston, clap, echantillon, sample
 - LMMS sert à fabriquer des beats et des morceaux, comme les producteurs.
 - L'icône « Faire des beats » sur le bureau ouvre « Mon premier beat » : un beat hip-hop déjà prêt, à 90 BPM.
 - Pour écouter : appuie sur la barre d'espace, ou sur le bouton lecture (le triangle) de la fenêtre « Éditeur de morceau ».
@@ -53,6 +53,14 @@
 - Pour ajouter un autre son : à gauche, ouvre « Mes échantillons », puis le dossier « drums », et fais glisser un son dans l'éditeur de rythme.
 - Pour garder ton travail : menu « Fichier », puis « Enregistrer ».
 - Pour mixer ton beat dans Mixxx : menu « Fichier », « Exporter », choisis le format WAV et enregistre-le dans le dossier « Musique ». Il apparaîtra dans Mixxx.
+Mélodie et accords :
+- « Mon premier beat » contient aussi une piste « Accords (la mineur) » avec 4 accords : La mineur, Fa, Do, Sol (un par mesure).
+- Pour voir ou changer les notes : double-clic sur le bloc de la piste d'accords dans l'« Éditeur de morceau ». Ça ouvre le « Piano virtuel ».
+- Dans le « Piano virtuel », chaque ligne est une note (les touches du piano à gauche). Clic gauche pour poser une note, clic droit pour l'effacer.
+- Pour ne jamais jouer faux : en haut du piano virtuel, choisis une gamme dans la liste (par exemple « minor » avec la note La). Les bonnes notes sont surlignées : « Marquer la gamme actuelle ».
+- Pour voir où poser un accord : choisis un accord dans la liste à côté, puis « Marquer l'accord actuel ».
+- Pour qu'une seule note joue un accord entier : ouvre l'instrument (clic sur son nom), onglet des fonctions, et active « Accords ». L'arpège joue les notes de l'accord l'une après l'autre.
+- Pour changer de son : à gauche, ouvre la liste des instruments et fais glisser un instrument (par exemple « LB302 » pour une basse, « Sf2 Player » pour un vrai piano) dans l'« Éditeur de morceau ».
 
 ## Hydrogen | bureau | hydrogen, boite a rythmes, boîte à rythmes, batterie, drum
 - Hydrogen est une boîte à rythmes toute simple, parfaite pour débuter.
