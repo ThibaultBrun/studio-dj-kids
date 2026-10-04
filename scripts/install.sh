@@ -16,7 +16,7 @@ as_child() { sudo -u "$CHILD" -H bash -c "$1"; }
 echo ">> Paquets"
 apt-get install -y -qq mixxx ffmpeg curl unzip git build-essential cmake alsa-utils \
     python3-pyqt6 python3-mutagen \
-    gcompris-qt tuxpaint tuxmath ktouch stellarium kgeography marble kturtle khangman blinken
+    lmms hydrogen gcompris-qt tuxpaint tuxmath ktouch stellarium kgeography marble kturtle khangman blinken
 
 echo ">> Port MIDI virtuel pour que Bip pilote Mixxx"
 echo snd-virmidi > /etc/modules-load.d/bip-virmidi.conf
@@ -74,7 +74,9 @@ for f in "$REPO"/desktop/*.desktop; do
         *) cp "$target" "$DESKTOP/" ;;
     esac
 done
-cp /usr/share/applications/org.mixxx.Mixxx.desktop "$DESKTOP/"
+cp /usr/share/applications/org.mixxx.Mixxx.desktop /usr/share/applications/org.hydrogenmusic.Hydrogen.desktop "$DESKTOP/"
+# Projet LMMS de départ ouvert par « Faire des beats »
+install -D -o "$CHILD" -g "$CHILD" -m 644 "$REPO/lmms/Mon-premier-beat.mmp" "$CHILD_HOME/lmms/projects/Mon-premier-beat.mmp"
 for app in tuxpaint tuxmath org.kde.ktouch org.stellarium.Stellarium org.kde.kgeography org.kde.marble \
            org.kde.kturtle org.kde.khangman org.kde.blinken org.kde.gcompris; do
     cp "/usr/share/applications/$app.desktop" "$DESKTOP/Apprendre/"

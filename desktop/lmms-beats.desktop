@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Faire des beats
+Comment=Créer des beats et des morceaux avec LMMS
+Exec=lmms /home/djpiloupilou/lmms/projects/Mon-premier-beat.mmp
+Icon=lmms
+Terminal=false
+Categories=AudioVideo;Audio;

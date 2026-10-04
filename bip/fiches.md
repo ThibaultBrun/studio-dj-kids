@@ -42,6 +42,26 @@
 - Bip peut préparer un mix tout seul : dis-lui « fais un mix avec » puis le nom de deux chansons ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
 - Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
+## LMMS | bureau | lmms, faire des beats, beat, beats, instru, instrumentale, prod, composer un morceau, grosse caisse, caisse claire, charleston, clap, echantillon, sample
+- LMMS sert à fabriquer des beats et des morceaux, comme les producteurs.
+- L'icône « Faire des beats » sur le bureau ouvre « Mon premier beat » : un beat hip-hop déjà prêt, à 90 BPM.
+- Pour écouter : appuie sur la barre d'espace, ou sur le bouton lecture (le triangle) de la fenêtre « Éditeur de morceau ».
+- La grille du beat est dans la fenêtre « Éditeur de rythme et de ligne de basse ». Chaque ligne est un son : grosse caisse, caisse claire, charleston, clap…
+- Chaque case est un moment du beat : 16 cases font une mesure. Clique sur une case pour allumer un coup, reclique pour l'éteindre.
+- Le beat hip-hop classique : grosse caisse sur les cases 1, 8 et 11, caisse claire sur les cases 5 et 13, charleston une case sur deux.
+- Pour changer la vitesse, change le nombre du tempo (BPM) en haut de la fenêtre. Hip-hop : entre 85 et 95. Électro : entre 120 et 130.
+- Pour ajouter un autre son : à gauche, ouvre « Mes échantillons », puis le dossier « drums », et fais glisser un son dans l'éditeur de rythme.
+- Pour garder ton travail : menu « Fichier », puis « Enregistrer ».
+- Pour mixer ton beat dans Mixxx : menu « Fichier », « Exporter », choisis le format WAV et enregistre-le dans le dossier « Musique ». Il apparaîtra dans Mixxx.
+
+## Hydrogen | bureau | hydrogen, boite a rythmes, boîte à rythmes, batterie, drum
+- Hydrogen est une boîte à rythmes toute simple, parfaite pour débuter.
+- Au milieu, il y a une grille : chaque ligne est un instrument de batterie (grosse caisse, caisse claire, charleston…).
+- Clique dans une case pour poser un coup, reclique pour l'enlever.
+- La barre d'espace lance et arrête le rythme.
+- Le tempo (BPM) se règle en haut de la fenêtre : plus le nombre est grand, plus c'est rapide.
+- Quand tu es à l'aise avec Hydrogen, passe à LMMS (« Faire des beats ») pour aller plus loin.
+
 ## Song Maker | bureau | song maker, songmaker, grille, composer, mélodie
 - Song Maker sert à composer de la musique en cliquant sur une grille de couleurs.
 - Clique dans les cases de la grande grille pour ajouter des notes. Plus la case est haute, plus la note est aiguë.
