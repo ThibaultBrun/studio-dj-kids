@@ -25,7 +25,10 @@
 ## Mixxx | bureau | mixxx, dj, mixer, mix, platine, deck, crossfader, sync, bpm, cue, scratcher, hercules, jog, casque, égaliseur, basses, aigus, enchaîner
 - Mixxx est le logiciel de DJ. Il y a deux platines : la platine 1 à gauche, la platine 2 à droite.
 - En bas, il y a la bibliothèque avec toutes les chansons.
-- Pour mettre une chanson sur une platine : attrape la chanson dans la liste avec la souris et fais-la glisser sur la platine. On peut aussi faire un clic droit sur la chanson et choisir la platine.
+- Pour mettre une chanson sur une platine, le plus simple : fais un double-clic sur la chanson dans la liste. Elle va toute seule sur une platine qui ne joue pas.
+- Pour remplir la platine 2 avec le double-clic : lance d'abord la platine 1 (bouton lecture), puis fais un double-clic sur une autre chanson : elle va sur la platine 2.
+- Autre moyen : clic droit sur la chanson, puis « Charger vers », puis « Platine », puis « Platine 2 ».
+- Dernier moyen, le glisser-déposer : clique sur la chanson et garde le bouton de la souris appuyé, déplace la souris jusqu'à la platine, puis lâche le bouton.
 - Le bouton lecture (le triangle) lance la chanson, il est sous chaque platine.
 - CUE : un repère pour revenir au début du passage choisi.
 - SYNC : met la chanson au même rythme que l'autre platine. Très pratique pour débuter !

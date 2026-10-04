@@ -27,15 +27,17 @@ MODE_MIX, MODE_SCRATCH = 1, 2
 MAX_TRIES = 3
 MAX_DURATION = 15 * 60
 
+MIX_WORD = r"(?:re)?mix\w*|melang\w*"
 MIX_REQUEST = re.compile(
     r"\b(fai[st]?|faire|lance[rz]?|commence[rz]?|on commence|prepare[rz]?|veux|voudrais|demarre[rz]?|on fait|cree[rz]?)\b"
-    r".*\bmix", re.IGNORECASE)
+    rf".*\b({MIX_WORD})|^\s*(bip\W*)?({MIX_WORD})\b", re.IGNORECASE)
 TRANSITION_REQUEST = re.compile(r"\b(enchaine|enchainer|transition|passe a la (deuxieme|2)|lance la (deuxieme|platine 2))\b")
 STOP_REQUEST = re.compile(r"\b(arrete|stop|stoppe|coupe)\b.*\b(musique|mix|tout|son)\b|^stop\b")
 YES = re.compile(r"^\s*(oui|ouais|ok|okay|vas[- ]y|d'?accord|go|c'?est bon|yes|super)\b")
 NO = re.compile(r"^\s*(non|nan|pas ca|annule|stop)\b")
-SONGS_AFTER_AVEC = re.compile(r"\bavec\s+(.+)$", re.IGNORECASE)
-SONG_SEPARATOR = re.compile(r"\s+(?:et|puis|avec)\s+|\s*,\s*", re.IGNORECASE)
+SONGS_AFTER_MIX = re.compile(r"\b(?:(?:re)?mix\w*|m[ée]lang\w*)\s+(.+)$", re.IGNORECASE)
+LEADING_WORDS = re.compile(r"^(?:-?moi|un|une|le|la|les|de|du|des|d'|entre|avec)\s+", re.IGNORECASE)
+SONG_SEPARATOR = re.compile(r"\s+(?:et|puis|avec)\s+", re.IGNORECASE)
 STOPWORDS = {"de", "des", "du", "la", "le", "les", "the", "et", "un", "une", "chanson", "musique", "son", "official", "video", "clip"}
 
 
@@ -74,7 +76,7 @@ def load_ambiances():
         ambiances.append({
             "name": name.strip(),
             "mode": mode.strip(),
-            "keywords": [normalize(k.strip()) for k in keywords.split(",") if k.strip()],
+            "keywords": [normalize(k.strip()).replace("-", " ") for k in keywords.split(",") if k.strip()],
             "tracks": [line[2:].strip() for line in lines if line.startswith("- ")],
             "beats": [line[5:].strip() for line in lines if line.startswith("beat:")],
             "scratches": [line[8:].strip() for line in lines if line.startswith("scratch:")],
@@ -83,7 +85,7 @@ def load_ambiances():
 
 
 def find_ambiance(text):
-    q = normalize(text)
+    q = normalize(text).replace("-", " ")  # « hip-hop » = « hip hop »
     if re.search(r"\bavec\b", q):  # « un mix avec telle et telle chanson » : chansons précises, pas une ambiance
         return None
     for ambiance in load_ambiances():
@@ -104,11 +106,14 @@ def ambiance_names():
 
 
 def songs_in_request(text):
-    """« fais un mix avec X et Y » -> ["X", "Y"] (sans IA : plus fiable qu'un petit modèle)."""
-    match = SONGS_AFTER_AVEC.search(text.strip().rstrip(" !?."))
+    """« fais un mix avec X et Y », « le remix de X avec Y » -> ["X", "Y"] (sans IA : plus fiable qu'un petit modèle)."""
+    match = SONGS_AFTER_MIX.search(text.strip().rstrip(" !?."))
     if not match:
         return []
-    songs = [part.strip(" «»\"'") for part in SONG_SEPARATOR.split(match.group(1))]
+    rest = match.group(1)
+    while LEADING_WORDS.match(rest):
+        rest = LEADING_WORDS.sub("", rest, count=1)
+    songs = [part.strip(" «»\"',") for part in SONG_SEPARATOR.split(rest)]
     return [song for song in songs if song][:2]
 
 
