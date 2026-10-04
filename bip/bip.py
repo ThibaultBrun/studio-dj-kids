@@ -8,8 +8,9 @@ import unicodedata
 from datetime import datetime
 from pathlib import Path
 
-from PyQt6.QtCore import QByteArray, QTimer, QUrl
-from PyQt6.QtGui import QFont
+from mutagen.id3 import ID3, ID3NoHeaderError
+from PyQt6.QtCore import QByteArray, QSize, QTimer, QUrl
+from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                              QTextBrowser, QVBoxLayout, QWidget)
@@ -40,6 +41,9 @@ QPushButton:hover { background: #357abd; }
 QPushButton:disabled { background: #9e9e9e; }
 QPushButton#chip { background: #eef4fc; color: #1a3d66; border: 2px solid #4a90e2; font-weight: normal; padding: 6px 10px; }
 QPushButton#chip:hover { background: #d6e6fa; }
+QPushButton#choice { background: white; color: #1a1a1a; border: 2px solid #4a90e2; text-align: left;
+                     font-weight: normal; padding: 6px 10px; min-height: 60px; }
+QPushButton#choice:hover { background: #d6e6fa; }
 QPushButton#reset { background: #ff9800; }
 QPushButton#mic { background: #43a047; font-size: 19px; min-height: 52px; }
 QPushButton#mic:hover { background: #388e3c; }
@@ -156,6 +160,10 @@ class Bip(QWidget):
         self.pending_mix = None
         self.mix_job = None
         self.show_confirm(False)
+        # Boutons pour choisir les chansons, platine par platine
+        self.choice_box = QVBoxLayout()
+        root.addLayout(self.choice_box)
+        self.choosing = None
 
         self.chips = []
         for text in SUGGESTIONS:
@@ -233,6 +241,8 @@ class Bip(QWidget):
             return
         self.pending_mix = None
         self.show_confirm(False)
+        self.clear_choices()
+        self.choosing = None
         self.speaker.stop()
         self.history.clear()
         self.last_fiches = []
@@ -322,6 +332,19 @@ class Bip(QWidget):
 
     def handle_mix_commands(self, question):
         """Gère les demandes liées au mix. Renvoie True si la question est traitée ici."""
+        if self.choosing:
+            slot = len(self.choosing["picked"])
+            index = mixeur.choice_index(question, self.choosing["candidates"][slot])
+            if index is not None or mixeur.is_no(question):
+                self.input.clear()
+                self.user_says(question)
+                if index is not None:
+                    self.pick_choice(index, echo=False)
+                else:
+                    self.cancel_choice(echo=False)
+                return True
+            self.clear_choices()
+            self.choosing = None
         if self.pending_mix:
             if mixeur.is_yes(question) or mixeur.is_no(question):
                 self.input.clear()
@@ -364,8 +387,11 @@ class Bip(QWidget):
         self.set_busy(True)
         self.bubbles.append(("bip", "🔎 Je cherche tes chansons…"))
         self.render()
-        self.resolver = mixeur.Resolver(queries, self)
-        self.resolver.resolved.connect(lambda items: self.on_resolved(mode, items))
+        self.resolver = mixeur.Resolver(queries, min_duration=0 if ambiance else 60, parent=self)
+        if ambiance:
+            self.resolver.resolved.connect(lambda found: self.on_resolved(mode, [c[0] for c in found]))
+        else:
+            self.resolver.resolved.connect(self.start_choosing)
         self.resolver.failed.connect(self.on_resolve_failed)
         self.resolver.start()
 
@@ -373,6 +399,88 @@ class Bip(QWidget):
         self.resolver.deleteLater()
         self.set_busy(False)
         self.propose_mix(mode, items)
+
+    # --- Choix des chansons, platine par platine ---
+    def start_choosing(self, candidates):
+        self.resolver.deleteLater()
+        self.set_busy(False)
+        self.choosing = {"candidates": candidates, "picked": []}
+        self.ask_choice()
+
+    def ask_choice(self):
+        slot = len(self.choosing["picked"])
+        options = self.choosing["candidates"][slot]
+        side = "gauche" if slot == 0 else "droite"
+        lines = [f"{i + 1}. {c['name']}" + (" (déjà dans ta musique)" if "path" in c else "") for i, c in enumerate(options)]
+        text = f"Pour la platine de {side}, laquelle tu veux ?\n" + "\n".join(lines)
+        self.bip_says(text, replace=slot == 0)
+        self.log("Bip", text)
+        self.clear_choices()
+        for i, candidate in enumerate(options):
+            button = QPushButton(f"{i + 1}. {candidate['name']}" + ("\n✅ déjà dans ta musique" if "path" in candidate else ""))
+            button.setObjectName("choice")
+            button.setIconSize(QSize(96, 54))
+            button.clicked.connect(lambda _, i=i: self.pick_choice(i))
+            self.load_icon(button, candidate)
+            self.choice_box.addWidget(button)
+        cancel = QPushButton("❌ Aucune, on arrête")
+        cancel.setObjectName("no")
+        cancel.clicked.connect(self.cancel_choice)
+        self.choice_box.addWidget(cancel)
+        for chip in self.chips:  # plus de place pour la conversation pendant le choix
+            chip.hide()
+
+    def load_icon(self, button, candidate):
+        if "path" in candidate:
+            try:
+                covers = ID3(candidate["path"]).getall("APIC")
+            except (ID3NoHeaderError, OSError):
+                covers = []
+            pixmap = QPixmap()
+            if covers and pixmap.loadFromData(covers[0].data):
+                button.setIcon(QIcon(pixmap))
+            return
+        reply = self.net.get(QNetworkRequest(QUrl(candidate["thumb"])))
+
+        def done():
+            pixmap = QPixmap()
+            if pixmap.loadFromData(reply.readAll()):
+                try:
+                    button.setIcon(QIcon(pixmap))
+                except RuntimeError:  # le bouton a déjà disparu
+                    pass
+            reply.deleteLater()
+        reply.finished.connect(done)
+
+    def clear_choices(self):
+        while self.choice_box.count():
+            widget = self.choice_box.takeAt(0).widget()
+            if widget:
+                widget.deleteLater()
+        for chip in self.chips:
+            chip.show()
+
+    def pick_choice(self, index, echo=True):
+        slot = len(self.choosing["picked"])
+        candidate = self.choosing["candidates"][slot][index]
+        self.choosing["picked"].append(candidate)
+        if echo:
+            self.user_says(f"{index + 1}. {candidate['name']}")
+        self.clear_choices()
+        if len(self.choosing["picked"]) < len(self.choosing["candidates"]):
+            self.ask_choice()
+            return
+        items = self.choosing["picked"]
+        self.choosing = None
+        self.start_mix(mixeur.MODE_MIX, items)
+
+    def cancel_choice(self, echo=True):
+        self.clear_choices()
+        self.choosing = None
+        if echo:
+            self.user_says("Aucune")
+        self.bip_says("D'accord ! Tu peux m'écrire les noms des chansons dans la case en bas, "
+                      "je comprendrai mieux qu'à l'oral 😉 Par exemple : fais un mix avec Get Lucky et Californication.")
 
     def on_resolve_failed(self, message):
         self.resolver.deleteLater()
@@ -404,6 +512,9 @@ class Bip(QWidget):
             self.bip_says("D'accord ! Tu peux m'écrire les noms des chansons dans la case en bas, "
                           "je comprendrai mieux qu'à l'oral 😉 Par exemple : fais un mix avec Get Lucky et Californication.")
             return
+        self.start_mix(mode, items)
+
+    def start_mix(self, mode, items):
         self.set_busy(True)
         self.bip_says("🎛 C'est parti, je prépare ton mix !")
         self.bubbles.append(("bip", "…"))

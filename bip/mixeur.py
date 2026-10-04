@@ -26,6 +26,7 @@ CC_PREPARE, CC_TRANSITION, CC_STOP = 0x70, 0x71, 0x72
 MODE_MIX, MODE_SCRATCH = 1, 2
 MAX_TRIES = 3
 MAX_DURATION = 15 * 60
+MAX_CHOICES = 3
 
 MIX_WORD = r"(?:re)?mix\w*|melang\w*"
 MIX_VERB = r"(?:re)?mix(?:e|er|ez)|melang\w*"  # « mixe… » mais pas « Mixxx… » (le logiciel)
@@ -138,18 +139,43 @@ def words(text):
     return {w for w in re.findall(r"\w+", normalize(text)) if len(w) > 1 and w not in STOPWORDS}
 
 
-def find_local(query):
-    """Cherche dans ~/Musique un MP3 qui contient (presque) tous les mots de la recherche."""
+def local_matches(query, limit=MAX_CHOICES):
+    """MP3 de ~/Musique qui contiennent (presque) tous les mots de la recherche, du plus proche au moins proche."""
     wanted = words(query)
     if not wanted:
-        return None
-    best, best_score = None, 0.0
+        return []
+    scored = []
     for path in mm.MUSIC_DIR.glob("*.mp3"):
         have = words(path.stem)
         score = len(wanted & have) / len(wanted) + len(wanted & have) / max(len(have), 1) / 10
+        if score >= 0.75:
+            scored.append((score, path))
+    return [path for _, path in sorted(scored, reverse=True)[:limit]]
+
+
+def find_local(query):
+    matches = local_matches(query, 1)
+    return matches[0] if matches else None
+
+
+NUMBERS = [r"1|un|une|premier|premiere", r"2|deux|deuxieme|second|seconde", r"3|trois|troisieme"]
+
+
+def choice_index(text, candidates):
+    """Comprend « la première », « deux », « 3 » ou un bout du titre. Renvoie l'indice choisi ou None."""
+    q = normalize(text)
+    if len(q.split()) <= 4:
+        for i, pattern in enumerate(NUMBERS[:len(candidates)]):
+            if re.search(rf"\b({pattern})\b", q):
+                return i
+    said = words(text)
+    best, best_score = None, 0.5
+    for i, candidate in enumerate(candidates):
+        name = words(candidate["name"])
+        score = len(said & name) / max(len(name), 1)
         if score > best_score:
-            best, best_score = path, score
-    return best if best_score >= 0.75 else None
+            best, best_score = i, score
+    return best
 
 
 # --- Mixxx ---
@@ -187,13 +213,14 @@ def send_midi(cc, value=1):
 
 
 class Resolver(QObject):
-    """Identifie chaque morceau demandé : fichier déjà téléchargé, sinon 1er bon résultat YouTube."""
-    resolved = pyqtSignal(list)   # [{"name", "path" ou "video_id"}, …]
+    """Trouve jusqu'à 3 candidats par morceau demandé : d'abord sa musique, puis YouTube."""
+    resolved = pyqtSignal(list)   # une liste de candidats {"name", "path" ou "video_id", "thumb"} par morceau
     failed = pyqtSignal(str)
 
-    def __init__(self, queries, parent=None):
+    def __init__(self, queries, min_duration=0, parent=None):
         super().__init__(parent)
         self.queries = queries
+        self.min_duration = min_duration  # 60 s pour écarter les « shorts » quand l'enfant choisit
         self.items = []
         self.proc = None
 
@@ -205,28 +232,33 @@ class Resolver(QObject):
             self.resolved.emit(self.items)
             return
         query = self.queries[len(self.items)]
-        local = find_local(query)
-        if local:
-            self.items.append({"name": local.stem, "path": local})
-            self.next()
-            return
-        self.proc = mm.ytdlp_process(["--flat-playlist", "--dump-json", f"ytsearch5:{query}"])
+        self.proc = mm.ytdlp_process(["--flat-playlist", "--dump-json", f"ytsearch8:{query}"])
         self.proc.finished.connect(lambda *_: self.search_done(query))
         self.proc.start()
 
     def search_done(self, query):
         out = bytes(self.proc.readAllStandardOutput()).decode(errors="replace")
         self.proc.deleteLater()
+        candidates = [{"name": path.stem, "path": path, "thumb": None} for path in local_matches(query)]
+        seen = {normalize(c["name"]) for c in candidates}
         for line in out.splitlines():
             try:
                 entry = json.loads(line)
             except ValueError:
                 continue
-            if entry.get("id") and entry.get("duration") and entry["duration"] <= MAX_DURATION:
-                artist, title = mm.make_name(entry)
-                self.items.append({"name": f"{artist} - {title}", "video_id": entry["id"]})
-                self.next()
-                return
+            duration = entry.get("duration") or 0
+            if not entry.get("id") or not self.min_duration <= duration <= MAX_DURATION:
+                continue
+            name = " - ".join(mm.make_name(entry))
+            if normalize(name) in seen:
+                continue
+            seen.add(normalize(name))
+            candidates.append({"name": name, "video_id": entry["id"],
+                               "thumb": f"https://i.ytimg.com/vi/{entry['id']}/mqdefault.jpg"})
+        if candidates:
+            self.items.append(candidates[:MAX_CHOICES])
+            self.next()
+            return
         self.failed.emit(f"Je n'ai pas trouvé « {query} » 😕 Essaie avec le nom de l'artiste en plus !")
 
 
