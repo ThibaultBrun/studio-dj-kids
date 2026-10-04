@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MixxxControllerPreset mixxxVersion="2.5.0" schemaVersion="1">
+    <info>
+        <name>Bip (contrôleur virtuel)</name>
+        <author>T. Brun</author>
+        <description>Laisse l'assistant Bip piloter Mixxx via le port MIDI virtuel VirMIDI : préparer un mix, synchroniser, enchaîner.</description>
+    </info>
+    <controller id="Bip">
+        <scriptfiles>
+            <file filename="Bip-scripts.js" functionprefix="Bip"/>
+        </scriptfiles>
+        <controls>
+            <!-- CC 0x70 : préparer (valeur 1 = mix, 2 = scratch) -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.prepare</key>
+                <status>0xB0</status>
+                <midino>0x70</midino>
+                <options><script-binding/></options>
+            </control>
+            <!-- CC 0x71 : enchaîner automatiquement de la platine 1 vers la 2 -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.transition</key>
+                <status>0xB0</status>
+                <midino>0x71</midino>
+                <options><script-binding/></options>
+            </control>
+            <!-- CC 0x72 : tout arrêter -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.stopAll</key>
+                <status>0xB0</status>
+                <midino>0x72</midino>
+                <options><script-binding/></options>
+            </control>
+        </controls>
+        <outputs/>
+    </controller>
+</MixxxControllerPreset>

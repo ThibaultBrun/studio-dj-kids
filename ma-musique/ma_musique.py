@@ -21,7 +21,7 @@ YTDLP = str(BIN / "yt-dlp")
 DENO = str(BIN / "deno")
 MUSIC_DIR = HOME / "Musique"
 TMP_DIR = MUSIC_DIR / ".en-cours"
-HISTORY_FILE = HOME / ".local/share/ma-musique/historique.json"
+HISTORY_FILE = HOME / ".local/share/studio-dj-kids/historique.json"  # données de l'enfant, hors du code
 NB_RESULTS = 12
 MAX_DURATION = 20 * 60  # on ignore les mix et les lives trop longs
 MAX_TRIES = 3
@@ -95,6 +95,75 @@ def ytdlp_process(args):
     return proc
 
 
+def load_history():
+    try:
+        return set(json.loads(HISTORY_FILE.read_text()))
+    except (OSError, ValueError):
+        return set()
+
+
+def add_to_history(video_id):
+    history = load_history() | {video_id}
+    HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    HISTORY_FILE.write_text(json.dumps(sorted(history)))
+
+
+def download_process(video_id):
+    """Prépare (sans le lancer) le téléchargement en MP3 d'une vidéo dans le dossier temporaire."""
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+    for old in TMP_DIR.glob(f"{video_id}.*"):
+        old.unlink()
+    return ytdlp_process([
+        "-x", "--audio-format", "mp3", "--audio-quality", "0",
+        "--embed-thumbnail", "--convert-thumbnails", "jpg",
+        "--ppa", "ThumbnailsConvertor+FFmpeg_o:-c:v mjpeg -vf crop=\"'min(iw,ih)':'min(iw,ih)'\"",
+        "--write-info-json", "--retries", "10", "--no-playlist",
+        "--newline", "--progress", "--progress-template",
+        "download:PROGRESS %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
+        "-o", str(TMP_DIR / "%(id)s.%(ext)s"),
+        f"https://www.youtube.com/watch?v={video_id}",
+    ])
+
+
+def parse_progress(line):
+    """Traduit une ligne de yt-dlp en (pourcentage global, texte), ou None."""
+    if line.startswith("PROGRESS "):
+        done, total, estimate = (line.split() + ["NA"] * 3)[1:4]
+        size = total if total != "NA" else estimate
+        try:
+            percent = min(100, float(done) / float(size) * 100)
+        except (ValueError, ZeroDivisionError):
+            return None
+        return percent * 0.8, f"⬇ Téléchargement… {percent:.0f} %"
+    if line.startswith("[ExtractAudio]"):
+        return 85, "🎛 Transformation en MP3…"
+    if line.startswith("[EmbedThumbnail]"):
+        return 95, "🖼 Ajout de la pochette…"
+    return None
+
+
+def finalize_download(video_id):
+    """Tague le MP3 téléchargé, le range en « Artiste - Titre.mp3 » et renvoie son chemin (None si raté)."""
+    mp3 = TMP_DIR / f"{video_id}.mp3"
+    info_file = TMP_DIR / f"{video_id}.info.json"
+    if not mp3.exists() or not info_file.exists():
+        return None
+    info = json.loads(info_file.read_text())
+    artist, title = make_name(info)
+    try:
+        tags = EasyID3(mp3)
+    except ID3NoHeaderError:
+        tags = EasyID3()
+    tags["artist"] = artist
+    tags["title"] = title
+    tags.save(mp3)
+    final = MUSIC_DIR / f"{safe_filename(artist)} - {safe_filename(title)}.mp3"
+    shutil.move(mp3, final)
+    info_file.unlink()
+    add_to_history(video_id)
+    return final
+
+
 class ResultRow(QFrame):
     def __init__(self, app, entry):
         super().__init__()
@@ -156,7 +225,7 @@ class MaMusique(QWidget):
         self.resize(1000, 750)
         self.setStyleSheet(STYLE)
         self.net = QNetworkAccessManager(self)
-        self.history = self.load_history()
+        self.history = load_history()
         self.queue = []
         self.current = None
         self.search_proc = None
@@ -203,16 +272,6 @@ class MaMusique(QWidget):
         self.self_update()
 
     # --- Historique (pour afficher « Déjà là ») ---
-    def load_history(self):
-        try:
-            return set(json.loads(HISTORY_FILE.read_text()))
-        except (OSError, ValueError):
-            return set()
-
-    def save_history(self):
-        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        HISTORY_FILE.write_text(json.dumps(sorted(self.history)))
-
     def self_update(self):
         # YouTube change souvent : on garde yt-dlp à jour en silence
         self.updater = ytdlp_process(["-U"])
@@ -292,19 +351,7 @@ class MaMusique(QWidget):
         row.set_state("busy", "⏳ Téléchargement…")
         row.set_progress(0, "C'est parti… 0 %" if job["tries"] == 1 else "🔁 Nouvel essai…")
         self.status.setText(f"⬇ Je télécharge « {row.entry.get('title')} »…")
-        video_id = row.entry["id"]
-        for old in TMP_DIR.glob(f"{video_id}.*"):
-            old.unlink()
-        proc = ytdlp_process([
-            "-x", "--audio-format", "mp3", "--audio-quality", "0",
-            "--embed-thumbnail", "--convert-thumbnails", "jpg",
-            "--ppa", "ThumbnailsConvertor+FFmpeg_o:-c:v mjpeg -vf crop=\"'min(iw,ih)':'min(iw,ih)'\"",
-            "--write-info-json", "--retries", "10", "--no-playlist",
-            "--newline", "--progress", "--progress-template",
-            "download:PROGRESS %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s",
-            "-o", str(TMP_DIR / "%(id)s.%(ext)s"),
-            f"https://www.youtube.com/watch?v={video_id}",
-        ])
+        proc = download_process(row.entry["id"])
         proc.readyReadStandardOutput.connect(self.download_output)
         proc.finished.connect(self.download_done)
         job["proc"] = proc
@@ -314,27 +361,17 @@ class MaMusique(QWidget):
         job = self.current
         row = job["row"]
         for line in bytes(job["proc"].readAllStandardOutput()).decode(errors="replace").splitlines():
-            if line.startswith("PROGRESS "):
-                done, total, estimate = (line.split() + ["NA"] * 3)[1:4]
-                size = total if total != "NA" else estimate
-                try:
-                    percent = min(100, float(done) / float(size) * 100)
-                except (ValueError, ZeroDivisionError):
-                    continue
-                row.set_progress(percent * 0.8, f"⬇ Téléchargement… {percent:.0f} %")
-            elif line.startswith("[ExtractAudio]"):
-                row.set_progress(85, "🎛 Transformation en MP3…")
-            elif line.startswith("[EmbedThumbnail]"):
-                row.set_progress(95, "🖼 Ajout de la pochette…")
+            progress = parse_progress(line)
+            if progress:
+                row.set_progress(*progress)
 
     def download_done(self):
         job = self.current
         row = job["row"]
         video_id = row.entry["id"]
-        mp3 = TMP_DIR / f"{video_id}.mp3"
-        info_file = TMP_DIR / f"{video_id}.info.json"
+        final = finalize_download(video_id)
 
-        if not mp3.exists() or not info_file.exists():
+        if not final:
             if job["tries"] < MAX_TRIES:
                 self.start_download()
                 return
@@ -342,20 +379,7 @@ class MaMusique(QWidget):
             row.progress.hide()
             self.status.setText("😕 Oups, ça n'a pas marché. Réessaie dans un moment !")
         else:
-            info = json.loads(info_file.read_text())
-            artist, title = make_name(info)
-            try:
-                tags = EasyID3(mp3)
-            except ID3NoHeaderError:
-                tags = EasyID3()
-            tags["artist"] = artist
-            tags["title"] = title
-            tags.save(mp3)
-            final = MUSIC_DIR / f"{safe_filename(artist)} - {safe_filename(title)}.mp3"
-            shutil.move(mp3, final)
-            info_file.unlink()
             self.history.add(video_id)
-            self.save_history()
             row.set_state("done", "✅ Téléchargé")
             row.set_progress(100, "🎉 Fini !")
             self.status.setText(f"🎉 « {final.stem} » est dans tes musiques !")

@@ -36,6 +36,8 @@
 - Pour écouter une chanson au casque avant de la faire entendre à tout le monde : le bouton avec un petit casque sur la platine.
 - Avec la console Hercules : les grandes roues (jog wheels) font avancer, reculer ou scratcher ; les boutons Play, Cue et Sync font la même chose qu'à l'écran.
 - Si une nouvelle chanson n'apparaît pas : menu Bibliothèque, puis « Rescanner la bibliothèque ».
+- Bip peut préparer un mix tout seul : dis-lui « fais un mix avec Alors on danse et One More Time » ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
+- Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
 ## Song Maker | bureau | song maker, songmaker, grille, composer, mélodie
 - Song Maker sert à composer de la musique en cliquant sur une grille de couleurs.

@@ -14,17 +14,19 @@ from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkReques
 from PyQt6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                              QTextBrowser, QVBoxLayout, QWidget)
 
+import mixeur
 from voix import Listener, Speaker, complete_sentences
 
 APP_DIR = Path(__file__).resolve().parent
 FICHES_FILE = APP_DIR / "fiches.md"
-LOG_DIR = APP_DIR / "conversations"
+DATA_DIR = Path.home() / ".local/share/studio-dj-kids"  # données de l'enfant, hors du code
+LOG_DIR = DATA_DIR / "conversations"
 OLLAMA = "http://127.0.0.1:11434"
 MODEL = "gemma3:4b"
 KEEP_ALIVE = "60m"
 MAX_HISTORY = 6  # nombre de messages précédents gardés en mémoire
 
-SUGGESTIONS = ["Comment on mixe dans Mixxx ?", "Je veux télécharger une chanson", "Je veux faire un jeu vidéo"]
+SUGGESTIONS = ["Comment on mixe dans Mixxx ?", "Fais-moi un mix hip-hop pour scratcher", "Je veux faire un jeu vidéo"]
 
 STYLE = """
 QWidget { font-size: 16px; }
@@ -43,6 +45,8 @@ QPushButton#mic { background: #43a047; font-size: 19px; min-height: 52px; }
 QPushButton#mic:hover { background: #388e3c; }
 QPushButton#recording { background: #e53935; font-size: 19px; min-height: 52px; }
 QPushButton#mic:disabled { background: #9e9e9e; }
+QPushButton#yes { background: #43a047; font-size: 18px; min-height: 48px; }
+QPushButton#no { background: #e53935; font-size: 18px; min-height: 48px; }
 QPushButton#voice { background: transparent; font-size: 26px; padding: 2px 6px; }
 """
 
@@ -82,6 +86,7 @@ Règles :
 - Si l'enfant parle d'un sujet qui n'est pas pour son âge, réponds gentiment que tu ne peux pas en parler et propose une activité.
 - Si l'enfant dit qu'il est triste, qu'il a peur ou que quelqu'un lui fait du mal, dis-lui avec douceur d'en parler tout de suite à un adulte de confiance.
 
+Tu sais aussi préparer un mix dans Mixxx : l'enfant peut te dire « fais un mix avec telle chanson et telle chanson » ou « fais-moi un mix hip-hop », « électro » ou « disco ».
 Sur le bureau de l'enfant : {desktop}, et le dossier « Apprendre ».
 Dans le dossier « Apprendre » : {folder}."""
 
@@ -108,7 +113,7 @@ class Bip(QWidget):
         self.reply = None
         self.buffer = b""
         self.spoken = 0            # partie de la réponse déjà envoyée à la voix
-        LOG_DIR.mkdir(exist_ok=True)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
         self.speaker = Speaker(self)
         self.listener = Listener(self)
         self.listener.heard.connect(self.on_heard)
@@ -135,6 +140,21 @@ class Bip(QWidget):
         self.view = QTextBrowser()
         self.view.setOpenLinks(False)
         root.addWidget(self.view, 1)
+
+        # Boutons pour confirmer un mix
+        confirm = QHBoxLayout()
+        self.yes_btn = QPushButton("✅ Oui, on mixe !")
+        self.yes_btn.setObjectName("yes")
+        self.yes_btn.clicked.connect(lambda: self.answer_mix(True))
+        self.no_btn = QPushButton("❌ Non")
+        self.no_btn.setObjectName("no")
+        self.no_btn.clicked.connect(lambda: self.answer_mix(False))
+        confirm.addWidget(self.yes_btn, 2)
+        confirm.addWidget(self.no_btn, 1)
+        root.addLayout(confirm)
+        self.pending_mix = None
+        self.mix_job = None
+        self.show_confirm(False)
 
         self.chips = []
         for text in SUGGESTIONS:
@@ -208,8 +228,10 @@ class Bip(QWidget):
             self.input.setFocus()
 
     def reset(self):
-        if self.reply:
+        if self.reply or self.mix_job:
             return
+        self.pending_mix = None
+        self.show_confirm(False)
         self.speaker.stop()
         self.history.clear()
         self.last_fiches = []
@@ -287,9 +309,123 @@ class Bip(QWidget):
             return found
         return self.last_fiches  # question de suite (« et après ? »)
 
+    # --- Mix automatique dans Mixxx ---
+    def show_confirm(self, visible):
+        self.yes_btn.setVisible(visible)
+        self.no_btn.setVisible(visible)
+
+    def user_says(self, text):
+        self.bubbles.append(("me", text))
+        self.render()
+        self.log("Enfant", text)
+
+    def handle_mix_commands(self, question):
+        """Gère les demandes liées au mix. Renvoie True si la question est traitée ici."""
+        if self.pending_mix:
+            if mixeur.is_yes(question) or mixeur.is_no(question):
+                self.input.clear()
+                self.user_says(question)
+                self.answer_mix(mixeur.is_yes(question), echo=False)
+                return True
+            self.pending_mix = None
+            self.show_confirm(False)
+        if mixeur.mixxx_running() and mixeur.is_transition_request(question):
+            self.input.clear()
+            self.user_says(question)
+            mixeur.send_midi(mixeur.CC_TRANSITION)
+            self.bip_says("C'est parti, j'enchaîne doucement vers la platine de droite ! 🎚")
+            return True
+        if mixeur.mixxx_running() and mixeur.is_stop_request(question):
+            self.input.clear()
+            self.user_says(question)
+            mixeur.send_midi(mixeur.CC_STOP)
+            self.bip_says("J'arrête la musique ⏹")
+            return True
+        if mixeur.is_mix_request(question):
+            self.input.clear()
+            self.speaker.stop()
+            self.user_says(question)
+            self.prepare_mix(question)
+            return True
+        return False
+
+    def prepare_mix(self, question):
+        ambiance = mixeur.find_ambiance(question)
+        if ambiance:
+            mode, queries = mixeur.pick_from_ambiance(ambiance)
+        else:
+            mode, queries = mixeur.MODE_MIX, mixeur.songs_in_request(question)
+        if len(queries) < 2:
+            self.bip_says("Pour un mix, il me faut deux chansons ! Dis-moi par exemple : "
+                          "« fais un mix avec Alors on danse et One More Time ». "
+                          f"Je connais aussi ces styles : {mixeur.ambiance_names()}.")
+            return
+        self.set_busy(True)
+        self.bubbles.append(("bip", "🔎 Je cherche tes chansons…"))
+        self.render()
+        self.resolver = mixeur.Resolver(queries, self)
+        self.resolver.resolved.connect(lambda items: self.on_resolved(mode, items))
+        self.resolver.failed.connect(self.on_resolve_failed)
+        self.resolver.start()
+
+    def on_resolved(self, mode, items):
+        self.resolver.deleteLater()
+        self.set_busy(False)
+        self.propose_mix(mode, items)
+
+    def on_resolve_failed(self, message):
+        self.resolver.deleteLater()
+        self.set_busy(False)
+        self.bip_says(message, replace=True)
+
+    def propose_mix(self, mode, items):
+        self.pending_mix = (mode, items)
+        if mode == mixeur.MODE_SCRATCH:
+            text = (f"Je mets le beat « {items[0]['name']} » sur la platine de gauche, "
+                    "et un son à scratcher sur celle de droite. On y va ?")
+        else:
+            text = (f"Je mets « {items[0]['name']} » sur la platine de gauche "
+                    f"et « {items[1]['name']} » sur la platine de droite. C'est bon ?")
+        self.bip_says(text, replace=True)
+        self.show_confirm(True)
+
+    def answer_mix(self, yes, echo=True):
+        if not self.pending_mix:
+            return
+        mode, items = self.pending_mix
+        self.pending_mix = None
+        self.show_confirm(False)
+        if echo:
+            self.user_says("Oui !" if yes else "Non")
+        if not yes:
+            self.bip_says("D'accord ! Demande-moi un autre mix quand tu veux 😉")
+            return
+        self.set_busy(True)
+        self.bip_says("🎛 C'est parti, je prépare ton mix !")
+        self.bubbles.append(("bip", "…"))
+        self.mix_job = mixeur.MixJob(mode, items, self)
+        self.mix_job.status.connect(self.on_mix_status)
+        self.mix_job.finished.connect(self.on_mix_finished)
+        self.mix_job.start()
+
+    def on_mix_status(self, text, speak):
+        self.bubbles[-1] = ("bip", text)
+        self.render()
+        if speak:
+            self.speaker.say(text)
+
+    def on_mix_finished(self, ok, message):
+        self.mix_job.deleteLater()
+        self.mix_job = None
+        self.set_busy(False)
+        self.bip_says(message, replace=True)
+        self.log("Bip", message)
+
     def ask(self, question):
         question = question.strip()
-        if not question or self.reply:
+        if not question or self.reply or self.mix_job:
+            return
+        if self.handle_mix_commands(question):
             return
         self.input.clear()
         self.speaker.stop()
