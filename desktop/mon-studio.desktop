@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mon Studio
+Comment=Composer un morceau : batterie, basse, accords et mélodie
+Exec=python3 /home/djpiloupilou/.local/share/mon-studio/mon_studio.py
+Icon=/home/djpiloupilou/.local/share/icons/ma-musique-web/mon-studio.svg
+Terminal=false
+Categories=AudioVideo;Audio;
+StartupWMClass=mon-studio

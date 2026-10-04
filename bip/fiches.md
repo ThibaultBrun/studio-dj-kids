@@ -42,6 +42,22 @@
 - Bip peut préparer un mix tout seul : dis-lui « fais un mix avec » puis le nom de deux chansons ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
 - Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
+## Mon Studio | bureau | mon studio, studio, composer, morceau, ligne de temps, motif, motifs, basse, melodie, mélodie, exporter, mes creations, mes créations
+- Mon Studio sert à composer un morceau avec 4 lignes : Batterie, Basse, Accords et Mélodie.
+- En haut, la ligne de temps : 16 mesures. Chaque bloc de couleur est un motif (A, B, C…) qui joue à cet endroit.
+- Pour placer un motif : clique sur le motif en bas (par exemple « A · Boom bap »), puis clique dans la ligne de temps. Tu peux glisser pour en mettre plusieurs. Clic droit pour enlever.
+- Pour modifier un motif : clique sur son nom en bas, puis clique dans la grille. Chaque case allumée est une note ou un coup de batterie.
+- « 🔁 Écouter ce motif » fait tourner le motif en boucle pendant que tu le modifies.
+- « ✨ Motifs prêts » donne des motifs tout faits : Boom bap, Électro, Reggaeton, Trap… pour la batterie ; des suites d'accords ; des basses ; des mélodies.
+- « ➕ Nouveau » crée un motif vide, « 📋 Copier » fait une copie à modifier.
+- Basse et mélodie : toutes les notes proposées sont dans la gamme, donc on ne peut pas jouer faux. Plusieurs cases à la suite = une note tenue. La basse suit les accords toute seule.
+- Accords : une case par temps. « Jeu » change la façon de jouer : Tenu, Rythmé ou Arpège.
+- « 🎁 Morceaux prêts » charge un morceau complet (Hip-hop chill, Pop joyeuse, Électro, Reggaeton) pour commencer.
+- Le Tempo change la vitesse, la Gamme change l'ambiance (mineur = plus triste ou mystérieux, majeur = plus joyeux).
+- À gauche de chaque ligne : l'instrument, le bouton pour couper la ligne et le volume.
+- « 🎧 Exporter vers Mixxx » transforme le morceau en musique : il arrive dans le dossier « Mes créations » et dans Mixxx.
+- « 💾 Enregistrer » garde le morceau pour le modifier plus tard avec « 📂 Ouvrir ».
+
 ## LMMS | bureau | lmms, faire des beats, guitare, guitar, piano, violon, instrument, melodie, mélodie, accord, accords, gamme, piano virtuel, note, notes, beat, beats, instru, instrumentale, prod, composer un morceau, grosse caisse, caisse claire, charleston, clap, echantillon, sample
 - LMMS sert à fabriquer des beats et des morceaux, comme les producteurs.
 - L'icône « Faire des beats » sur le bureau ouvre « Mon premier beat » : un beat hip-hop déjà prêt, à 90 BPM.

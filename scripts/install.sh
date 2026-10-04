@@ -15,7 +15,7 @@ as_child() { sudo -u "$CHILD" -H bash -c "$1"; }
 
 echo ">> Paquets"
 apt-get install -y -qq mixxx ffmpeg curl unzip git build-essential cmake alsa-utils \
-    python3-pyqt6 python3-mutagen \
+    python3-pyqt6 python3-mutagen libfluidsynth3 fluid-soundfont-gm \
     lmms hydrogen gcompris-qt tuxpaint tuxmath ktouch stellarium kgeography marble kturtle khangman blinken
 
 echo ">> Port MIDI virtuel pour que Bip pilote Mixxx"
@@ -61,6 +61,7 @@ set -e
 mkdir -p ~/.local/share/applications ~/.local/share/icons/ma-musique-web ~/.mixxx/controllers \"\$(xdg-user-dir DESKTOP)/Apprendre\"
 ln -sfn '$REPO/ma-musique' ~/.local/share/ma-musique
 ln -sfn '$REPO/bip' ~/.local/share/bip
+ln -sfn '$REPO/mon-studio' ~/.local/share/mon-studio
 cp '$REPO'/icons/*.svg ~/.local/share/icons/ma-musique-web/
 ln -sf '$REPO/mixxx/Bip.midi.xml' '$REPO/mixxx/Bip-scripts.js' ~/.mixxx/controllers/
 "
