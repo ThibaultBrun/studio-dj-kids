@@ -27,6 +27,10 @@ echo ">> IA locale (Ollama + Gemma 3)"
 command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
 ollama pull gemma3:4b
 
+echo ">> Banque de sons GeneralUser GS (pour Mon Studio)"
+[ -f /usr/share/sounds/sf2/GeneralUser-GS.sf2 ] || curl -fsSL -o /usr/share/sounds/sf2/GeneralUser-GS.sf2 \
+    https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/main/GeneralUser-GS.sf2
+
 echo ">> Mon Studio (dépôt séparé)"
 if [ -d /opt/mon-studio/.git ]; then git -C /opt/mon-studio pull -q; else git clone -q https://github.com/ThibaultBrun/mon-studio.git /opt/mon-studio; fi
 chmod -R a+rX /opt/mon-studio
