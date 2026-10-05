@@ -5,6 +5,8 @@ Un PC sous Ubuntu Studio pensé pour un enfant de 9 ans qui veut apprendre à mi
 ## Ce qu'il y a dedans
 
 - **Ma Musique** (`ma-musique/`) : chercher une chanson et la télécharger en MP3 « Artiste - Titre », avec les tags et la pochette, en quelques clics.
+  - Onglet **Ma bibliothèque** : écouter ses chansons et les **séparer en pistes** d'un clic (voix, sans voix, batterie, basse, guitare, piano, autres), rangées dans `~/Musique/Pistes séparées/`. Chaque piste se glisse directement dans Mixxx.
+  - Séparation : [audio-separator](https://github.com/nomadkaraoke/python-audio-separator) avec le modèle **BS-RoFormer SW** (bien meilleur que Spleeter ou Demucs), sur la carte graphique s'il y en a une (environ 1,5 × la durée du morceau sur une GTX 1050), sinon sur le processeur.
 - **Bip** (`bip/`) : un petit robot assistant, 100 % local, qui répond aux questions sur les logiciels de l'ordinateur, à l'écrit ou à la voix.
   - IA : [Ollama](https://ollama.com) + Gemma 3 (4B), guidée par des fiches pratiques (`bip/fiches.md`) pour ne pas inventer de boutons.
   - Voix : [Piper](https://github.com/rhasspy/piper) (voix Tom, effet robot) ; écoute : [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (modèle small).

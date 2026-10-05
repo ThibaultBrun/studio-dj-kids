@@ -63,6 +63,25 @@ cd $W
 [ -f models/ggml-small.bin ] || sh ./models/download-ggml-model.sh small
 '
 
+echo ">> Séparateur de pistes pour Ma Musique (BS-RoFormer SW, ~7 Go)"
+as_child '
+set -e
+cd ~/.local/bin
+[ -x uv ] || curl -fsSL https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz | tar xz --strip-components=1
+S=~/.local/share/separateur
+if ! $S/venv/bin/python -c "from audio_separator.separator import Separator" 2>/dev/null; then
+    ./uv venv -q --allow-existing --python 3.12 $S/venv
+    # PyTorch CUDA 12.6 : la dernière version qui gère encore les cartes GeForce GTX 10xx
+    VIRTUAL_ENV=$S/venv ./uv pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cu126
+    VIRTUAL_ENV=$S/venv ./uv pip install -q "audio-separator[cpu]" librosa audioread
+fi
+$S/venv/bin/python -c "
+from pathlib import Path
+from audio_separator.separator import Separator
+Separator(model_file_dir=str(Path.home() / \".local/share/separateur/modeles\")).load_model(\"BS-Roformer-SW.ckpt\")
+" 2>/dev/null
+'
+
 echo ">> Applis, raccourcis et réglages du bureau"
 as_child "
 set -e

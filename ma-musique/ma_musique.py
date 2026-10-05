@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ma Musique : chercher une chanson sur YouTube et la télécharger en MP3 « Artiste - Titre »."""
+"""Ma Musique : télécharger des chansons en MP3 « Artiste - Titre », les écouter et les séparer en pistes."""
 import json
 import os
 import re
@@ -12,8 +12,10 @@ from mutagen.id3 import ID3NoHeaderError
 from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QFont, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
-from PyQt6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit,
-                             QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                             QProgressBar, QPushButton, QScrollArea, QTabWidget, QVBoxLayout, QWidget)
+
+from bibliotheque import Bibliotheque
 
 HOME = Path.home()
 BIN = HOME / ".local/bin"
@@ -40,6 +42,16 @@ QPushButton:disabled { background: #9e9e9e; }
 QPushButton#done { background: #43a047; }
 QPushButton#error { background: #e53935; }
 QPushButton#folder { background: #ff9800; }
+QPushButton#play { background: #8e24aa; }
+QPushButton#play:hover { background: #6a1b9a; }
+QPushButton#stem { background: #26a69a; font-size: 17px; }
+QPushButton#stem:hover { background: #00897b; }
+QFrame#stems { background: #eef8f7; border-radius: 12px; }
+QLabel#help { font-size: 15px; color: #555; }
+QTabWidget::pane { border: none; }
+QTabBar::tab { font-size: 20px; font-weight: bold; padding: 12px 34px; margin-right: 6px;
+               border-top-left-radius: 14px; border-top-right-radius: 14px; background: #dde7f3; }
+QTabBar::tab:selected { background: #4a90e2; color: white; }
 QFrame#row { border: 2px solid #ddd; border-radius: 14px; }
 QLabel#title { font-size: 18px; font-weight: bold; }
 QLabel#status { font-size: 18px; }
@@ -222,7 +234,7 @@ class MaMusique(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("🎵 Ma Musique")
-        self.resize(1000, 750)
+        self.resize(1100, 800)
         self.setStyleSheet(STYLE)
         self.net = QNetworkAccessManager(self)
         self.history = load_history()
@@ -231,7 +243,12 @@ class MaMusique(QWidget):
         self.search_proc = None
         TMP_DIR.mkdir(parents=True, exist_ok=True)
 
-        root = QVBoxLayout(self)
+        outer = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        outer.addWidget(self.tabs, 1)
+        search_page = QWidget()
+        root = QVBoxLayout(search_page)
+        root.setContentsMargins(0, 8, 0, 0)
         bar = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText("Tape le nom d'une chanson ou d'un artiste…")
@@ -266,12 +283,31 @@ class MaMusique(QWidget):
         bottom.addWidget(self.status, 1)
         bottom.addWidget(self.search_bar)
         bottom.addWidget(folder_btn)
-        root.addLayout(bottom)
+        outer.addLayout(bottom)
+
+        self.library = Bibliotheque(self.status)
+        self.tabs.addTab(search_page, "🔍 Chercher")
+        self.tabs.addTab(self.library, "📚 Ma bibliothèque")
+        self.tabs.currentChanged.connect(self.tab_changed)
 
         self.search.setFocus()
         self.self_update()
 
-    # --- Historique (pour afficher « Déjà là ») ---
+    def tab_changed(self, index):
+        if self.tabs.widget(index) is self.library:
+            self.library.refresh()
+        else:
+            self.library.stop_playing()
+
+    def closeEvent(self, event):
+        if self.library.busy() and QMessageBox.question(
+                self, "Ma Musique", "✂️ Une chanson est en train d'être découpée.\nTu veux vraiment fermer ?") \
+                != QMessageBox.StandardButton.Yes:
+            event.ignore()
+            return
+        event.accept()
+
+    # --- yt-dlp ---
     def self_update(self):
         # YouTube change souvent : on garde yt-dlp à jour en silence
         self.updater = ytdlp_process(["-U"])

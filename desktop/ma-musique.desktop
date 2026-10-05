@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Ma Musique
-Comment=Chercher et télécharger des chansons en MP3
+Comment=Télécharger des chansons, les écouter et les séparer en pistes
 Exec=python3 /home/djpiloupilou/.local/share/ma-musique/ma_musique.py
 Icon=folder-music
 Terminal=false
