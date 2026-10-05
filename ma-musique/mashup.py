@@ -325,10 +325,13 @@ class MashupWizard(QDialog):
         for button in (self.to_mixxx, self.to_mp3):
             button.setObjectName("mode")
             button.setCheckable(True)
-            button.setChecked(True)
             button.setMinimumHeight(60)
             button.toggled.connect(self.outputs_changed)
             outputs.addWidget(button)
+        # Par défaut : seulement « jouer dans Mixxx ». Le MP3 n'est PAS coché d'office —
+        # l'enfant le fabrique lui-même s'il le veut (évite un long rendu MP3 à chaque mashup).
+        self.to_mixxx.setChecked(True)
+        self.to_mp3.setChecked(False)
         layout.addLayout(outputs)
         self.summary_time = QLabel()
         self.summary_time.setObjectName("status")
