@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel, QLineEd
                              QProgressBar, QPushButton, QStackedWidget, QVBoxLayout, QWidget)
 
 import mixxx_db
-from bibliotheque import HOME, SECONDS_PER_SECOND, music_text, read_song, stems_of
+from bibliotheque import HOME, MUSIC_DIR, SECONDS_PER_SECOND, music_text, read_song, stems_of
 
 sys.path.insert(0, str(HOME / ".local/share/bip"))
 
@@ -28,7 +28,9 @@ STEM_OF_MODE = {"voix": "Voix", "musique": "Sans voix"}
 CC_PREPARE, CC_SHIFT, CC_LEADER, CC_START1, CC_START2 = 0x70, 0x73, 0x74, 0x75, 0x77
 MODE_MASHUP = 3
 # Durée estimée des étapes, en secondes (mesurée sur ce PC) ; la séparation dépend de la chanson
-ESTIMATES = {"telechargement": 30, "analyse": 25, "mixxx": 30}
+ESTIMATES = {"telechargement": 30, "analyse": 30, "mixxx": 30}
+MP3_SECONDS_PER_SECOND = 0.35  # fabrication du MP3 (étirement de la voix compris), mesurée sur ce PC
+LEAD_IN_BARS = 8  # dans Mixxx, on démarre 8 mesures avant les refrains
 SEPARATION_EXTRA = 20  # chargement du modèle
 
 
@@ -95,6 +97,24 @@ def singing_start(voice_file, info):
     period = 4 * 60 / info["bpm"]
     bars = int((t - info["first_beat"]) // period)
     return max(0.0, info["first_beat"] + bars * period)
+
+
+def alignment(follower, leader, ratio):
+    """Comment caler la platine qui suit sur la meneuse pour que les refrains tombent ensemble.
+
+    follower/leader : analyses (bpm, first_bar, chorus en s). ratio : tempo meneuse / suiveuse.
+    Renvoie les points de départ dans Mixxx (quelques mesures avant les refrains) et, pour le MP3,
+    le décalage de la suiveuse (s, après étirement) ; None si on ne connaît pas les refrains."""
+    if not follower.get("chorus") or not leader.get("chorus"):
+        return None
+    bar_leader = 4 * 60 / leader["bpm"]
+    bar_follower = 4 * 60 / leader["bpm"] * ratio  # une mesure de la meneuse, dans le temps de la suiveuse
+    room = min(int((leader["chorus"] - leader.get("first_bar", 0)) // bar_leader),
+               int((follower["chorus"] - follower.get("first_bar", 0)) // bar_follower))
+    lead_in = max(0, min(LEAD_IN_BARS, room))
+    return {"follower_start": follower["chorus"] - lead_in * bar_follower,
+            "leader_start": leader["chorus"] - lead_in * bar_leader,
+            "mp3_delay": leader["chorus"] - follower["chorus"] / ratio}
 
 
 class Choice:
@@ -298,11 +318,28 @@ class MashupWizard(QDialog):
         verdict.addWidget(self.smiley)
         verdict.addWidget(self.verdict, 1)
         layout.addLayout(verdict)
+        layout.addWidget(QLabel("Et je fais quoi avec ?"))
+        outputs = QHBoxLayout()
+        self.to_mixxx = QPushButton("🎚 Le jouer dans Mixxx")
+        self.to_mp3 = QPushButton("💾 Fabriquer le MP3")
+        for button in (self.to_mixxx, self.to_mp3):
+            button.setObjectName("mode")
+            button.setCheckable(True)
+            button.setChecked(True)
+            button.setMinimumHeight(60)
+            button.toggled.connect(self.outputs_changed)
+            outputs.addWidget(button)
+        layout.addLayout(outputs)
         self.summary_time = QLabel()
         self.summary_time.setObjectName("status")
         layout.addWidget(self.summary_time)
         layout.addStretch()
         return page
+
+    def outputs_changed(self):
+        self.update_buttons()
+        if self.stack.currentIndex() == 2:
+            self.show_summary()
 
     def make_work(self):
         page = QWidget()
@@ -333,6 +370,12 @@ class MashupWizard(QDialog):
         self.close_mixxx_btn.hide()
         self.close_mixxx_btn.clicked.connect(self.close_mixxx)
         layout.addWidget(self.close_mixxx_btn)
+        self.listen_btn = QPushButton("▶ Écouter mon mashup")
+        self.listen_btn.setObjectName("play")
+        self.listen_btn.setMinimumHeight(60)
+        self.listen_btn.hide()
+        self.listen_btn.clicked.connect(lambda: self.library.toggle_play(self.mp3, self.listen_btn, "▶ Écouter mon mashup"))
+        layout.addWidget(self.listen_btn)
         return page
 
     def update_buttons(self):
@@ -345,7 +388,7 @@ class MashupWizard(QDialog):
             self.next_btn.setObjectName("")
         elif index == 2:
             self.next_btn.setText("🚀 Lancer le mashup !")
-            self.next_btn.setEnabled(True)
+            self.next_btn.setEnabled(self.to_mixxx.isChecked() or self.to_mp3.isChecked())
             self.next_btn.setObjectName("done")
         else:
             self.next_btn.setText("Fermer")
@@ -414,15 +457,24 @@ class MashupWizard(QDialog):
                 done = bool(choice.path and stems_of(choice.path))
                 steps.append({"kind": "separation", "deck": i, "text": f"✂️ Séparer « {choice.name} »",
                               "estimate": 0 if done else choice.duration * SECONDS_PER_SECOND + SEPARATION_EXTRA})
-            done = bool(choice.path and self.library.song_info(choice.path))
-            steps.append({"kind": "analyse", "deck": i, "text": f"🥁 Écouter le rythme de « {choice.name} »",
+            done = bool(choice.path and self.library.structure(choice.path))
+            steps.append({"kind": "analyse", "deck": i, "text": f"🥁 Trouver le rythme et le refrain de « {choice.name} »",
                           "estimate": 0 if done else ESTIMATES["analyse"]})
-        steps.append({"kind": "mixxx", "text": "🎚 Préparer Mixxx et caler les platines", "estimate": ESTIMATES["mixxx"]})
+        if self.to_mp3.isChecked():
+            _, leader = self.roles()
+            steps.append({"kind": "mp3", "text": "💾 Fabriquer le MP3 (refrains calés)",
+                          "estimate": self.pages[leader].choice.duration * MP3_SECONDS_PER_SECOND})
+        if self.to_mixxx.isChecked():
+            steps.append({"kind": "mixxx", "text": "🎚 Préparer Mixxx et caler les platines",
+                          "estimate": ESTIMATES["mixxx"]})
         for step in steps:
             step.update(state="todo", fraction=0.0, started=None)
         return steps
 
     def start(self):
+        self.final_message = ""
+        self.mp3 = None
+        self.listen_btn.hide()
         self.running = True
         self.steps = self.plan()
         self.current = -1
@@ -487,12 +539,13 @@ class MashupWizard(QDialog):
         while True:
             self.current += 1
             if self.current >= len(self.steps):
+                self.all_done()
                 return
             step = self.step()
             choice = self.pages[step["deck"]].choice if "deck" in step else None
             # Déjà fait ? (chanson déjà séparée, rythme déjà connu)
             if (step["kind"] == "separation" and stems_of(choice.path)) or \
-                    (step["kind"] == "analyse" and self.library.song_info(choice.path)):
+                    (step["kind"] == "analyse" and self.library.structure(choice.path)):
                 step["state"] = "skip"
                 continue
             break
@@ -509,11 +562,21 @@ class MashupWizard(QDialog):
             if not self.library.busy_row(row):
                 self.library.enqueue(row)
         elif step["kind"] == "analyse":
-            self.work_status.setText(f"🥁 J'écoute le rythme et la tonalité de « {choice.name} »…")
+            self.work_status.setText(f"🥁 J'écoute le rythme, la tonalité et le refrain de « {choice.name} »…")
             self.set_fraction(0.3)
             self.library.request_analysis(choice.path)
+        elif step["kind"] == "mp3":
+            self.make_mp3()
         else:
             self.prepare_mixxx()
+
+    def all_done(self):
+        self.running = False
+        self.clock.stop()
+        self.show_steps()
+        if self.final_message:
+            self.work_status.setText(self.final_message)
+        self.update_buttons()
 
     # Téléchargement (comme l'onglet « Chercher »)
     def download(self, choice):
@@ -556,6 +619,67 @@ class MashupWizard(QDialog):
             self.finish_step(ok, None if ok else ("😕 La séparation n'a pas marché." if kind == "separation"
                                                   else "😕 Je n'ai pas trouvé le rythme de cette chanson."))
 
+    # --- Réglages communs au MP3 et à Mixxx ---
+    def settings(self):
+        """Qui mène, qui suit, de combien étirer et transposer, et où caler les refrains."""
+        follower, leader = self.roles()
+        infos = [self.library.song_info(p.choice.path) for p in self.pages]
+        structures = [self.library.structure(p.choice.path) or {} for p in self.pages]
+        # Tempo de Mixxx s'il l'a analysé (c'est lui qui joue), mesures et refrain de notre analyse
+        merged = [{**structures[i], **infos[i], "first_bar": structures[i].get("first_bar", infos[i].get("first_beat", 0))}
+                  for i in range(2)]
+        result = match(infos[follower], infos[leader])
+        timing = alignment(merged[follower], merged[leader], result["ratio"])
+        return follower, leader, infos, result, timing
+
+    def make_mp3(self):
+        follower, leader, infos, result, timing = self.settings()
+        files = [self.deck_file(0), self.deck_file(1)]
+        if timing:
+            delay = timing["mp3_delay"]
+            self.work_status.setText("💾 Je fabrique ton mashup, avec les deux refrains en même temps…")
+        else:  # refrain inconnu : on cale le début de la voix sur une mesure de la musique
+            start = singing_start(files[follower], infos[follower]) if self.pages[follower].choice.mode == "voix" else 0
+            delay = 0 - start / result["ratio"]
+            self.work_status.setText("💾 Je fabrique ton mashup…")
+        ratio, pitch = result["ratio"], 2 ** (result["shift"] / 12)
+        trim = max(0.0, -delay) * ratio  # la suiveuse commence trop tôt : on coupe son début
+        wait_ms = int(max(0.0, delay) * 1000)
+        leader_duration = self.pages[leader].choice.duration
+        names = [self.pages[i].choice.name for i in (follower, leader)]
+        creations = MUSIC_DIR / "Mes créations"
+        creations.mkdir(parents=True, exist_ok=True)
+        self.mp3 = creations / f"Mashup - {names[0]} x {names[1]}.mp3"
+        follower_chain = (f"[0:a]atrim=start={trim:.3f},asetpts=PTS-STARTPTS,"
+                          f"rubberband=tempo={ratio:.5f}:pitch={pitch:.5f}:pitchq=quality,"
+                          f"adelay={wait_ms}|{wait_ms},volume=1.15[f]")
+        mix = (f"[1:a][f]amix=inputs=2:duration=first:normalize=0,afade=t=in:d=1,"
+               f"afade=t=out:st={max(0, leader_duration - 4):.2f}:d=4[a]")
+        self.mp3_proc = QProcess(self)
+        self.mp3_proc.setProgram("ffmpeg")
+        self.mp3_proc.setArguments([
+            "-v", "error", "-y", "-progress", "pipe:1", "-nostats", "-i", str(files[follower]), "-i", str(files[leader]),
+            "-filter_complex", f"{follower_chain};{mix}", "-map", "[a]", "-c:a", "libmp3lame", "-q:a", "2",
+            "-metadata", "artist=Mashup", "-metadata", f"title={names[0]} x {names[1]}", str(self.mp3)])
+
+        def output():
+            for line in bytes(self.mp3_proc.readAllStandardOutput()).decode(errors="replace").splitlines():
+                if line.startswith("out_time_us=") and line[12:].isdigit():
+                    self.set_fraction(int(line[12:]) / 1e6 / max(1, leader_duration))
+
+        def done(code, _status):
+            if code != 0:
+                self.finish_step(False, "😕 Je n'ai pas réussi à fabriquer le MP3.")
+                return
+            self.listen_btn.show()
+            self.final_message = (f"🎉 Ton mashup est prêt : « {self.mp3.stem} » ! Il est dans « Mes créations ».")
+            self.library.refresh()
+            self.finish_step()
+
+        self.mp3_proc.readyReadStandardOutput.connect(output)
+        self.mp3_proc.finished.connect(done)
+        self.mp3_proc.start()
+
     # --- Mixxx ---
     def deck_file(self, i):
         choice = self.pages[i].choice
@@ -567,11 +691,13 @@ class MashupWizard(QDialog):
         if not mixeur.mixxx_configured():
             self.finish_step(False, "Mixxx n'a encore jamais été ouvert. Demande à papa de l'ouvrir une première fois !")
             return
-        follower, leader = self.roles()
-        infos = [self.library.song_info(p.choice.path) for p in self.pages]
-        result = match(infos[follower], infos[leader])
-        starts = [singing_start(self.deck_file(i), infos[i]) if page.choice.mode == "voix" else 0.0
-                  for i, page in enumerate(self.pages)]
+        follower, leader, infos, result, timing = self.settings()
+        if timing:  # quelques mesures avant les refrains : ils tombent ensemble
+            starts = [0.0, 0.0]
+            starts[follower], starts[leader] = timing["follower_start"], timing["leader_start"]
+        else:
+            starts = [singing_start(self.deck_file(i), infos[i]) if page.choice.mode == "voix" else 0.0
+                      for i, page in enumerate(self.pages)]
         self.mixxx = {"mixeur": mixeur, "shift": result["shift"], "leader": leader + 1, "starts": starts,
                       "step": "closed", "deadline": time.time() + 600, "timer": QTimer(self)}
         self.mixxx["timer"].timeout.connect(self.mixxx_tick)
@@ -655,13 +781,9 @@ class MashupWizard(QDialog):
         self.mixxx["timer"].stop()
         self.mixxx = None
         self.close_mixxx_btn.hide()
-        self.finish_step(ok, message)
         if ok:
-            self.work_status.setText(message)
-            self.running = False
-            self.clock.stop()
-            self.show_steps()
-            self.update_buttons()
+            self.final_message = message + (f"\n\n{self.final_message}" if self.final_message else "")
+        self.finish_step(ok, message)
 
     def closeEvent(self, event):
         if getattr(self, "clock", None):

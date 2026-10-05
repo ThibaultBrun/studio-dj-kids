@@ -50,6 +50,7 @@
 - Séparer une chanson prend environ 5 minutes : la barre de progression montre où ça en est.
 - Le smiley dit si ça ira bien ensemble : 😀 super, 😐 ça peut marcher, 😬 ça risque de sonner bizarre.
 - Si Mixxx est déjà ouvert, l'assistant propose de le fermer pour y mettre le mashup.
+- Avant de lancer, choisis « Le jouer dans Mixxx » et/ou « Fabriquer le MP3 » : le MP3 arrive dans « Mes créations », avec les deux refrains en même temps.
 
 ## Mon Studio | bureau | mon studio, studio, swing, humain, accent, annuler, retour en arriere, clavier, touche, touches, enregistrer, jouer en direct, defi, défi, defis, défis, exercice, lecon, leçon, composer, morceau, ligne de temps, motif, motifs, basse, melodie, mélodie, exporter, mes creations, mes créations
 - Mon Studio sert à composer un morceau avec 4 lignes : Batterie, Basse, Accords et Mélodie.

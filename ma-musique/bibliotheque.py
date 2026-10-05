@@ -19,6 +19,7 @@ SEPARATOR_PY = HOME / ".local/share/separateur/venv/bin/python"
 SEPARER = Path(__file__).resolve().parent / "separer.py"
 ANALYSER = Path(__file__).resolve().parent / "analyser.py"
 ANALYSES_FILE = HOME / ".local/share/studio-dj-kids/analyses.json"  # tempo et tonalité trouvés par Ma Musique
+ANALYSIS_VERSION = 2  # version 2 : mesures et refrain en plus
 AUDIO_EXT = {".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus"}
 STEM_ICONS = {"Voix": "🎤", "Sans voix": "🎶", "Batterie": "🥁", "Basse": "🎸",
               "Guitare": "🪕", "Piano": "🎹", "Autres": "✨"}
@@ -389,7 +390,7 @@ class Bibliotheque(QWidget):
             row.refresh_stems()
             info = self.song_info(path)
             row.set_music(info, listening=self.current is not None and self.current.get("path") == path)
-            if not info and self.separator_ok and path not in self.to_analyse:
+            if not self.structure(path) and self.separator_ok and path not in self.to_analyse:
                 self.to_analyse.append(path)
         if not self.current:
             self.status.setText(f"📚 Tu as {len(songs)} chansons" if songs
@@ -410,6 +411,16 @@ class Bibliotheque(QWidget):
         entry = self.analyses.get(str(path))
         try:
             if entry and entry.get("mtime") == int(path.stat().st_mtime):
+                return entry
+        except OSError:
+            pass
+        return None
+
+    def structure(self, path):
+        """Notre analyse complète (mesures, refrain…), ou None si elle manque ou date d'une ancienne version."""
+        entry = self.analyses.get(str(path))
+        try:
+            if entry and entry.get("version", 1) >= ANALYSIS_VERSION and entry.get("mtime") == int(path.stat().st_mtime):
                 return entry
         except OSError:
             pass
@@ -482,7 +493,7 @@ class Bibliotheque(QWidget):
             return
         while self.to_analyse:
             path = self.to_analyse.pop(0)
-            if path in self.rows and not self.song_info(path):
+            if path in self.rows and not self.structure(path):
                 self.start_analysis(path)
                 return
 
@@ -503,7 +514,8 @@ class Bibliotheque(QWidget):
     def start_analysis(self, path):
         self.current = {"kind": "analyse", "path": path, "out": b""}
         self.rows[path].set_music(None, listening=True)
-        self.current["proc"] = self.run([ANALYSER, path], self.analysis_output, self.analysis_done)
+        artist, title, _, _ = read_song(path)  # pour retrouver les paroles (et donc le refrain)
+        self.current["proc"] = self.run([ANALYSER, path, artist, title], self.analysis_output, self.analysis_done)
 
     def analysis_output(self):
         self.current["out"] += bytes(self.current["proc"].readAllStandardOutput())
@@ -522,7 +534,7 @@ class Bibliotheque(QWidget):
             ANALYSES_FILE.write_text(json.dumps(self.analyses, indent=1, ensure_ascii=False))
         if path in self.rows:
             self.rows[path].set_music(self.song_info(path))
-        self.job_done.emit("analyse", path, bool(self.song_info(path)))
+        self.job_done.emit("analyse", path, bool(self.structure(path)))
         self.sync_mixxx()
         self.next_job()
 
@@ -578,7 +590,7 @@ class Bibliotheque(QWidget):
             row.set_progress(100, "🎉 Fini !")
             row.stems_box.show()
             self.status.setText(f"🎉 « {row.path.stem} » est découpée ! Écoute les pistes ou glisse-les dans Mixxx.")
-            if not self.song_info(row.path) and row.path not in self.to_analyse:
+            if not self.structure(row.path) and row.path not in self.to_analyse:
                 self.to_analyse.insert(0, row.path)
         else:
             row.progress.hide()

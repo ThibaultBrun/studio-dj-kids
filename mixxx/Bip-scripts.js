@@ -95,7 +95,8 @@ Bip.setStartLow = function(channel, control, value) {
 
 Bip.setupMashup = function(loaded) {
     // La platine qui suit (souvent une voix) prend le tempo de la meneuse, sans changer de hauteur (keylock),
-    // décalée du nombre de demi-tons qui accorde les deux tonalités.
+    // décalée du nombre de demi-tons qui accorde les deux tonalités. Ma Musique donne les points de départ :
+    // quelques mesures avant le refrain de chaque chanson.
     var leader = "[Channel" + Bip.mashup.leader + "]";
     var follower = "[Channel" + (3 - Bip.mashup.leader) + "]";
     [1, 2].forEach(function(deck) {
@@ -113,12 +114,10 @@ Bip.setupMashup = function(loaded) {
         engine.setValue(leader, "sync_enabled", 1);
         engine.setValue(follower, "sync_enabled", 1);
     }
+    // Les deux platines partent ensemble, chacune au début d'une mesure : les refrains tomberont ensemble
     engine.setValue(leader, "play", 1);
-    // La seconde platine part un instant après, pile sur un temps de la première (quantize)
-    engine.beginTimer(300, function() {
-        engine.setValue(follower, "play", 1);
-        Bip.say(loaded ? "PRET_MASHUP" : "PRET_SANS_SYNC");
-    }, true);
+    engine.setValue(follower, "play", 1);
+    Bip.say(loaded ? "PRET_MASHUP" : "PRET_SANS_SYNC");
 };
 
 Bip.setupScratch = function() {
