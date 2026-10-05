@@ -91,7 +91,19 @@ def main():
             notes += [[round(k * bar, 3), 1] for k in range(int((end - start) // bar)) if k not in have]
             notes.sort()
         charts[level] = notes
-    print(json.dumps({"notes": charts, "start": round(start, 3), "end": round(end, 3),
+
+    # Pads : des « sons à envoyer » sur les accents les plus forts et bien isolés (1 toutes les ~2 mesures).
+    # 4 sons qui tournent (0=corne, 1=scratch, 2=zap, 3=boom). Optionnel : le jeu les ignore s'il n'y en a pas.
+    pads = []
+    last_pad, idx, t = -10.0, 0, start
+    while t < end:
+        pos = round((t - first_bar) / sixteenth) % 16
+        if pos % 4 == 0 and max(strength(lane, t) for lane in range(3)) >= 0.9 and (t - last_pad) >= 1.5 * bar:
+            pads.append([round(t - start, 3), idx % 4])
+            idx, last_pad = idx + 1, t
+        t += sixteenth
+
+    print(json.dumps({"notes": charts, "pads": pads, "start": round(start, 3), "end": round(end, 3),
                       "bpm": info["bpm"]}), flush=True)
 
 
