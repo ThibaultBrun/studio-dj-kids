@@ -20,7 +20,6 @@ MIXXX_DIR = HOME / ".mixxx"
 MIXXX_CFG = MIXXX_DIR / "mixxx.cfg"
 MIXXX_LOG = MIXXX_DIR / "mixxx.log"
 MAPPING = MIXXX_DIR / "controllers" / "Bip.midi.xml"
-DEVICE_KEY = "VirMIDI_1-0"          # nom du port MIDI virtuel vu par Mixxx, espaces remplacés par _
 MIDI_PORT = "hw:VirMIDI,0"
 CC_PREPARE, CC_TRANSITION, CC_STOP = 0x70, 0x71, 0x72
 MODE_MIX, MODE_SCRATCH = 1, 2
@@ -187,12 +186,25 @@ def mixxx_configured():
     return MIXXX_CFG.exists()
 
 
+def device_keys():
+    """Noms du port MIDI virtuel vus par Mixxx (« VirMIDI_<carte>-0 »). Le numéro de carte change selon
+    l'ordre de démarrage des cartes son : on les déclare tous, Mixxx active celui qu'il trouve."""
+    keys = {"VirMIDI_0-0", "VirMIDI_1-0"}
+    try:
+        for line in Path("/proc/asound/cards").read_text().splitlines():
+            if "VirMIDI" in line and line.split()[0].isdigit():
+                keys.add(f"VirMIDI_{line.split()[0]}-0")
+    except OSError:
+        pass
+    return sorted(keys)
+
+
 def configure_mixxx():
     """Active le contrôleur virtuel « Bip » dans la configuration de Mixxx (Mixxx doit être fermé)."""
     lines = MIXXX_CFG.read_text().splitlines()
-    wanted = [
-        ("[Controller]", f"{DEVICE_KEY} 1"),
-        ("[ControllerPreset]", f"{DEVICE_KEY} {MAPPING}"),
+    wanted = [entry for key in device_keys()
+              for entry in (("[Controller]", f"{key} 1"), ("[ControllerPreset]", f"{key} {MAPPING}"))]
+    wanted += [
         # Sinon Mixxx pose une question au démarrage, qui bloque l'activation du contrôleur
         ("[Config]", "show_menubar_hint 0"),
         ("[Config]", "hide_menubar 0"),
