@@ -48,6 +48,13 @@ QPushButton#stem { background: #26a69a; font-size: 17px; }
 QPushButton#stem:hover { background: #00897b; }
 QFrame#stems { background: rgba(38, 166, 154, 0.18); border-radius: 12px; }
 QLabel#help { font-size: 15px; font-style: italic; }
+QFrame#player { background: rgba(74, 144, 226, 0.18); border-radius: 14px; }
+QPushButton#round { font-size: 24px; padding: 0; border-radius: 30px; }
+QSlider::groove:horizontal { height: 12px; background: rgba(128, 128, 128, 0.35); border-radius: 6px; }
+QSlider::sub-page:horizontal { background: #4a90e2; border-radius: 6px; }
+QSlider::handle:horizontal { background: white; border: 3px solid #4a90e2; width: 20px; margin: -7px 0;
+                             border-radius: 13px; }
+QSlider::handle:horizontal:disabled { border-color: #9e9e9e; }
 QTabWidget::pane { border: none; }
 QTabBar::tab { font-size: 20px; font-weight: bold; padding: 12px 34px; margin-right: 6px;
                border-top-left-radius: 14px; border-top-right-radius: 14px; background: #2c4f78; color: white; }

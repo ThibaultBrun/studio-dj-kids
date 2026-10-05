@@ -3,11 +3,11 @@ from pathlib import Path
 
 from mutagen import File as AudioFile
 from mutagen import MutagenError
-from PyQt6.QtCore import QMimeData, QProcess, QProcessEnvironment, Qt, QUrl
+from PyQt6.QtCore import QMimeData, QProcess, QProcessEnvironment, Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QDrag, QPixmap
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-                             QProgressBar, QPushButton, QScrollArea, QVBoxLayout, QWidget)
+                             QProgressBar, QPushButton, QScrollArea, QSlider, QStyle, QVBoxLayout, QWidget)
 
 HOME = Path.home()
 MUSIC_DIR = HOME / "Musique"
@@ -92,6 +92,96 @@ class DragButton(QPushButton):
         drag = QDrag(self)
         drag.setMimeData(mime)
         drag.exec(Qt.DropAction.CopyAction)
+
+
+class JumpSlider(QSlider):
+    """Curseur qui saute directement là où on clique (au lieu d'avancer petit à petit)."""
+    jumped = pyqtSignal(int)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            value = QStyle.sliderValueFromPosition(self.minimum(), self.maximum(),
+                                                   int(event.position().x()), self.width())
+            self.setValue(value)
+            self.jumped.emit(value)
+        super().mousePressEvent(event)
+
+
+class PlayerBar(QFrame):
+    """La barre de lecture en bas de la bibliothèque."""
+
+    def __init__(self, player, audio):
+        super().__init__()
+        self.setObjectName("player")
+        self.player = player
+        layout = QHBoxLayout(self)
+
+        self.pause_btn = QPushButton("⏸")
+        self.pause_btn.setObjectName("round")
+        self.pause_btn.setFixedSize(60, 60)
+        self.pause_btn.setToolTip("Pause / Lecture")
+        self.pause_btn.clicked.connect(self.toggle_pause)
+        self.stop_btn = QPushButton("⏹")
+        self.stop_btn.setObjectName("round")
+        self.stop_btn.setFixedSize(60, 60)
+        self.stop_btn.setToolTip("Arrêter")
+        self.stop_btn.clicked.connect(player.stop)
+        layout.addWidget(self.pause_btn)
+        layout.addWidget(self.stop_btn)
+
+        middle = QVBoxLayout()
+        self.title = QLabel()
+        self.title.setObjectName("title")
+        middle.addWidget(self.title)
+        line = QHBoxLayout()
+        self.slider = JumpSlider(Qt.Orientation.Horizontal)
+        self.slider.sliderMoved.connect(player.setPosition)
+        self.slider.jumped.connect(player.setPosition)
+        self.time = QLabel()
+        self.time.setMinimumWidth(110)
+        self.time.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        line.addWidget(self.slider, 1)
+        line.addWidget(self.time)
+        middle.addLayout(line)
+        layout.addLayout(middle, 1)
+
+        layout.addWidget(QLabel("🔊"))
+        self.volume = QSlider(Qt.Orientation.Horizontal)
+        self.volume.setRange(0, 100)
+        self.volume.setValue(80)
+        self.volume.setFixedWidth(120)
+        self.volume.setToolTip("Volume")
+        self.volume.valueChanged.connect(lambda v: audio.setVolume(v / 100))
+        audio.setVolume(0.8)
+        layout.addWidget(self.volume)
+
+        player.positionChanged.connect(self.position_changed)
+        player.durationChanged.connect(lambda d: (self.slider.setRange(0, d), self.position_changed(player.position())))
+        player.playbackStateChanged.connect(self.state_changed)
+        self.state_changed(player.playbackState())
+
+    def toggle_pause(self):
+        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.player.pause()
+        else:
+            self.player.play()
+
+    def position_changed(self, position):
+        if not self.slider.isSliderDown():
+            self.slider.setValue(position)
+        self.time.setText(f"{fmt_duration(position / 1000)} / {fmt_duration(self.player.duration() / 1000)}")
+
+    def state_changed(self, state):
+        stopped = state == QMediaPlayer.PlaybackState.StoppedState
+        self.pause_btn.setText("⏸" if state == QMediaPlayer.PlaybackState.PlayingState else "▶")
+        for widget in (self.pause_btn, self.stop_btn, self.slider):
+            widget.setEnabled(not stopped)
+        if stopped:
+            self.title.setText("🎧 Choisis une chanson et clique sur ▶ Écouter")
+            self.slider.setValue(0)
+            self.time.setText("")
+        else:
+            self.title.setText(f"🎧 {Path(self.player.source().toLocalFile()).stem}")
 
 
 class SongRow(QFrame):
@@ -237,6 +327,7 @@ class Bibliotheque(QWidget):
         help_text.setWordWrap(True)
         help_text.setObjectName("help")
         root.addWidget(help_text)
+        root.addWidget(PlayerBar(self.player, self.audio))
 
     # --- Liste des chansons ---
     def refresh(self):
