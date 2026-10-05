@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel, QLineEd
                              QProgressBar, QPushButton, QStackedWidget, QVBoxLayout, QWidget)
 
 import mixxx_db
-from bibliotheque import HOME, music_text, read_song, stems_of
+from bibliotheque import HOME, SECONDS_PER_SECOND, music_text, read_song, stems_of
 
 sys.path.insert(0, str(HOME / ".local/share/bip"))
 
@@ -27,8 +27,19 @@ STEM_OF_MODE = {"voix": "Voix", "musique": "Sans voix"}
 # Contrôleur virtuel de Bip (mixxx/Bip-scripts.js)
 CC_PREPARE, CC_SHIFT, CC_LEADER, CC_START1, CC_START2 = 0x70, 0x73, 0x74, 0x75, 0x77
 MODE_MASHUP = 3
-# Poids des étapes dans la barre de progression
-WEIGHTS = {"telechargement": 10, "separation": 60, "analyse": 8, "mixxx": 12}
+# Durée estimée des étapes, en secondes (mesurée sur ce PC) ; la séparation dépend de la chanson
+ESTIMATES = {"telechargement": 30, "analyse": 25, "mixxx": 30}
+SEPARATION_EXTRA = 20  # chargement du modèle
+
+
+def fmt_wait(seconds):
+    """« environ 4 min » / « moins d'une minute » (pour un enfant, pas besoin des secondes)."""
+    if seconds < 15:
+        return "presque fini !"
+    if seconds < 60:
+        return "moins d'une minute"
+    minutes = round(seconds / 60)
+    return f"environ {minutes} minute{'s' if minutes > 1 else ''}"
 
 
 def parse_key(text):
@@ -93,6 +104,12 @@ class Choice:
         self.path = None      # chanson déjà dans la bibliothèque
         self.online = None    # ou résultat Internet {"id", "title", ...} à télécharger
         self.mode = None
+
+    @property
+    def duration(self):
+        if self.online:
+            return self.online.get("duration") or 240
+        return read_song(self.path)[2] if self.path else 240
 
     @property
     def name(self):
@@ -281,6 +298,9 @@ class MashupWizard(QDialog):
         verdict.addWidget(self.smiley)
         verdict.addWidget(self.verdict, 1)
         layout.addLayout(verdict)
+        self.summary_time = QLabel()
+        self.summary_time.setObjectName("status")
+        layout.addWidget(self.summary_time)
         layout.addStretch()
         return page
 
@@ -299,6 +319,10 @@ class MashupWizard(QDialog):
         self.progress.setRange(0, 1000)
         self.progress.setMinimumHeight(40)
         layout.addWidget(self.progress)
+        self.time_label = QLabel()
+        self.time_label.setObjectName("title")
+        self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.time_label)
         self.work_status = QLabel()
         self.work_status.setObjectName("status")
         self.work_status.setWordWrap(True)
@@ -374,31 +398,70 @@ class MashupWizard(QDialog):
             self.smiley.setText("🤔")
             self.verdict.setText("Je ne connais pas encore le rythme de ces chansons : je vais l'écouter, "
                                  "puis je calerai tout dans Mixxx.")
+        total = sum(step["estimate"] for step in self.plan())
+        self.summary_time.setText(f"⏱ Ça va prendre {fmt_wait(total)}.")
 
     # --- Le travail ---
-    def start(self):
-        self.running = True
-        self.steps = []
+    def plan(self):
+        """Les étapes à faire, avec leur durée estimée (celles déjà faites sont marquées « skip »)."""
+        steps = []
         for i, page in enumerate(self.pages):
             choice = page.choice
             if choice.online:
-                self.steps.append({"kind": "telechargement", "deck": i, "text": f"⬇ Télécharger « {choice.name} »"})
+                steps.append({"kind": "telechargement", "deck": i, "text": f"⬇ Télécharger « {choice.name} »",
+                              "estimate": ESTIMATES["telechargement"]})
             if choice.mode != "complete":
-                self.steps.append({"kind": "separation", "deck": i, "text": f"✂️ Séparer « {choice.name} »"})
-            self.steps.append({"kind": "analyse", "deck": i, "text": f"🥁 Écouter le rythme de « {choice.name} »"})
-        self.steps.append({"kind": "mixxx", "text": "🎚 Préparer Mixxx et caler les platines"})
-        for step in self.steps:
-            step.update(state="todo", fraction=0.0)
+                done = bool(choice.path and stems_of(choice.path))
+                steps.append({"kind": "separation", "deck": i, "text": f"✂️ Séparer « {choice.name} »",
+                              "estimate": 0 if done else choice.duration * SECONDS_PER_SECOND + SEPARATION_EXTRA})
+            done = bool(choice.path and self.library.song_info(choice.path))
+            steps.append({"kind": "analyse", "deck": i, "text": f"🥁 Écouter le rythme de « {choice.name} »",
+                          "estimate": 0 if done else ESTIMATES["analyse"]})
+        steps.append({"kind": "mixxx", "text": "🎚 Préparer Mixxx et caler les platines", "estimate": ESTIMATES["mixxx"]})
+        for step in steps:
+            step.update(state="todo", fraction=0.0, started=None)
+        return steps
+
+    def start(self):
+        self.running = True
+        self.steps = self.plan()
         self.current = -1
+        self.clock = QTimer(self)
+        self.clock.timeout.connect(self.show_steps)
+        self.clock.start(1000)
         self.next_step()
 
+    def remaining(self, step):
+        """Temps restant estimé pour une étape : d'après sa vitesse réelle dès qu'on la connaît."""
+        if step["state"] in ("done", "skip"):
+            return 0
+        if step["state"] != "busy" or not step["started"]:
+            return step["estimate"]
+        elapsed = time.time() - step["started"]
+        if step["fraction"] > 0.1 and elapsed > 10:
+            return elapsed / step["fraction"] * (1 - step["fraction"])
+        return max(step["estimate"] * (1 - step["fraction"]), step["estimate"] - elapsed, 5)
+
     def show_steps(self):
+        if not self.steps:
+            return
         icons = {"todo": "⬜", "busy": "⏳", "done": "✅", "skip": "✅", "fail": "❌"}
-        self.steps_label.setText("<br>".join(f"{icons[s['state']]} {s['text']}" for s in self.steps))
-        total = sum(WEIGHTS[s["kind"]] for s in self.steps)
-        done = sum(WEIGHTS[s["kind"]] * (1 if s["state"] in ("done", "skip") else s["fraction"]) for s in self.steps)
-        self.progress.setValue(int(done / total * 1000))
-        self.progress.setFormat(f"{done / total * 100:.0f} %")
+        self.steps_label.setText("<br>".join(f"{icons[s['state']]} {s['text']}" for s in self.steps
+                                             if s["estimate"] or s["state"] not in ("skip", "todo")))
+        # La barre avance avec le temps : chaque étape compte pour sa durée (estimée, puis réelle)
+        left = sum(self.remaining(s) for s in self.steps)
+        spent = sum(time.time() - s["started"] for s in self.steps if s["started"] and s["state"] == "busy") + \
+            sum(s.get("took", 0) for s in self.steps)
+        fraction = spent / (spent + left) if spent + left else 1
+        if any(s["state"] == "fail" for s in self.steps):
+            self.time_label.setText("")
+        elif all(s["state"] in ("done", "skip") for s in self.steps):
+            fraction = 1
+            self.time_label.setText("🎉 Fini !")
+        else:
+            self.time_label.setText(f"⏱ Encore {fmt_wait(left)}")
+        self.progress.setValue(int(fraction * 1000))
+        self.progress.setFormat(f"{fraction * 100:.0f} %")
 
     def step(self):
         return self.steps[self.current]
@@ -408,10 +471,13 @@ class MashupWizard(QDialog):
         self.show_steps()
 
     def finish_step(self, ok=True, message=None):
-        self.step()["state"] = "done" if ok else "fail"
+        step = self.step()
+        step["state"] = "done" if ok else "fail"
+        step["took"] = time.time() - step["started"] if step["started"] else 0
         self.show_steps()
         if not ok:
             self.running = False
+            self.clock.stop()
             self.work_status.setText(message or "😕 Oups, ça n'a pas marché. Réessaie, ou demande à papa.")
             self.update_buttons()
             return
@@ -431,13 +497,13 @@ class MashupWizard(QDialog):
                 continue
             break
         step["state"] = "busy"
+        step["started"] = time.time()
         self.show_steps()
         if step["kind"] == "telechargement":
             self.download(choice)
         elif step["kind"] == "separation":
             self.library.refresh()
-            minutes = max(1, round(self.library.rows[choice.path].duration * 1.5 / 60))
-            self.work_status.setText(f"✂️ Je découpe « {choice.name} »… environ {minutes} min. "
+            self.work_status.setText(f"✂️ Je découpe « {choice.name} » en pistes… "
                                      "Tu peux faire autre chose en attendant !")
             row = self.library.rows[choice.path]
             if not self.library.busy_row(row):
@@ -593,9 +659,13 @@ class MashupWizard(QDialog):
         if ok:
             self.work_status.setText(message)
             self.running = False
+            self.clock.stop()
+            self.show_steps()
             self.update_buttons()
 
     def closeEvent(self, event):
+        if getattr(self, "clock", None):
+            self.clock.stop()
         if self.mixxx:
             self.mixxx["timer"].stop()
         super().closeEvent(event)
