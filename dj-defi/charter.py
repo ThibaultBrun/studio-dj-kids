@@ -24,6 +24,10 @@ LEVELS = {
     "expert": (lambda pos, strong: pos % 2 == 0 or strong, 2),    # croches, doubles croches bien marquées
 }
 BARS_BEFORE_CHORUS, BARS = 8, 32
+# En expert (2 colonnes en même temps), la 2e colonne ne s'allume que si c'est une attaque
+# vraiment forte et distincte : évite qu'un seul coup qui "bave" sur 2 bandes (ex. grosse
+# caisse qui déborde dans les médiums) ne crée une double-note fantôme.
+DOUBLE_LANE_MIN = 0.7
 
 
 def band_onsets(audio):
@@ -83,7 +87,13 @@ def main():
             if allowed(pos, max(scores) >= 0.85):
                 # Sur le temps, on est plus généreux ; entre les temps, il faut une vraie attaque
                 threshold = 0.35 if on_beat else 0.6
-                lanes = [int(lane) for lane in np.argsort(scores)[::-1] if scores[lane] >= threshold][:per_hit]
+                ranked = [int(lane) for lane in np.argsort(scores)[::-1]]
+                lanes = [ranked[0]] if scores[ranked[0]] >= threshold else []
+                # Colonnes supplémentaires (expert) : seuil plus haut pour ne garder que
+                # les vrais coups simultanés, pas le débordement d'un même coup sur 2 bandes.
+                for lane in ranked[1:per_hit]:
+                    if scores[lane] >= max(threshold, DOUBLE_LANE_MIN):
+                        lanes.append(lane)
                 notes += [[round(t - start, 3), lane] for lane in lanes]
             t += sixteenth
         if level != "expert":  # au moins une note par mesure, même dans les passages calmes
