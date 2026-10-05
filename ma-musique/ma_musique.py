@@ -9,7 +9,7 @@ from pathlib import Path
 
 from mutagen.easyid3 import EasyID3
 from mutagen.id3 import ID3NoHeaderError
-from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt, QUrl
+from PyQt6.QtCore import QProcess, QProcessEnvironment, Qt, QTimer, QUrl
 from PyQt6.QtGui import QDesktopServices, QFont, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest
 from PyQt6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
@@ -44,6 +44,8 @@ QPushButton#error { background: #e53935; }
 QPushButton#folder { background: #ff9800; }
 QPushButton#play { background: #8e24aa; }
 QPushButton#mashup { background: #e91e63; }
+QPushButton#mode { background: #5c6bc0; }
+QPushButton#mode:checked { background: #43a047; border: 4px solid #ffeb3b; }
 QPushButton#mashup:hover { background: #c2185b; }
 QPushButton#play:hover { background: #6a1b9a; }
 QPushButton#stem { background: #26a69a; font-size: 17px; }
@@ -441,4 +443,7 @@ if __name__ == "__main__":
     app.setFont(QFont(app.font().family(), 12))
     window = MaMusique()
     window.show()
+    if "--mashup" in sys.argv:  # raccourci « Créer un mashup » : on ouvre directement l'assistant
+        window.tabs.setCurrentWidget(window.library)
+        QTimer.singleShot(300, window.library.open_mashup)
     sys.exit(app.exec())

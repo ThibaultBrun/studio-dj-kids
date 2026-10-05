@@ -1,8 +1,10 @@
-"""Faire un mashup : la voix d'une chanson sur la musique d'une autre.
+"""Assistant « Créer un mashup ».
 
-On dit à l'enfant si les deux vont bien ensemble (tempo et tonalité), on lui fait écouter un extrait,
-puis on ouvre Mixxx avec la voix sur la platine 1 et la musique sur la platine 2, déjà calées.
+Platine 1 puis platine 2 : une chanson (de la bibliothèque ou d'Internet), en entier, juste la voix ou juste
+la musique. Ensuite l'assistant fait tout : téléchargement, séparation, tempo et tonalité, puis il ouvre
+Mixxx avec les deux platines calées (même tempo, même tonalité, la voix qui démarre là où elle chante).
 """
+import json
 import re
 import subprocess
 import sys
@@ -10,20 +12,23 @@ import time
 
 from PyQt6.QtCore import QProcess, QProcessEnvironment, QSize, Qt, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton,
-                             QVBoxLayout)
+from PyQt6.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+                             QProgressBar, QPushButton, QStackedWidget, QVBoxLayout, QWidget)
 
 import mixxx_db
-from bibliotheque import HOME, music_text, read_song
+from bibliotheque import HOME, music_text, read_song, stems_of
 
 sys.path.insert(0, str(HOME / ".local/share/bip"))
 
 NOTES = mixxx_db.NOTES
-PREVIEW = HOME / ".cache/ma-musique/extrait-mashup.mp3"
-PREVIEW_SECONDS = 30
-CC_SHIFT = 0x73
-MODE_MASHUP = 3
 SMILEYS = ["😬", "😐", "😀"]
+MODES = {"complete": "🎵 Chanson entière", "voix": "🎤 Juste la voix", "musique": "🎶 Juste la musique"}
+STEM_OF_MODE = {"voix": "Voix", "musique": "Sans voix"}
+# Contrôleur virtuel de Bip (mixxx/Bip-scripts.js)
+CC_PREPARE, CC_SHIFT, CC_LEADER, CC_START1, CC_START2 = 0x70, 0x73, 0x74, 0x75, 0x77
+MODE_MASHUP = 3
+# Poids des étapes dans la barre de progression
+WEIGHTS = {"telechargement": 10, "separation": 60, "analyse": 8, "mixxx": 12}
 
 
 def parse_key(text):
@@ -35,272 +40,487 @@ def parse_key(text):
     return (NOTES.index(note), minor) if note in NOTES else None
 
 
-def match(voice, music):
-    """Est-ce que la voix ira bien sur la musique ? Renvoie une note (0, 1, 2), le réglage et les explications."""
-    # Tempo : la voix suit la musique. On accepte aussi le double ou la moitié (même pulsation).
-    ratio = min((music["bpm"] / (voice["bpm"] * k) for k in (0.5, 1, 2)), key=lambda r: abs(r - 1))
+def match(follower, leader):
+    """Est-ce que `follower` ira bien sur `leader` (qui donne le tempo) ? Note (0-2), réglages et explications."""
+    # Tempo : on accepte aussi le double ou la moitié (même pulsation)
+    ratio = min((leader["bpm"] / (follower["bpm"] * k) for k in (0.5, 1, 2)), key=lambda r: abs(r - 1))
     change = ratio - 1
     tempo_score = 2 if abs(change) <= 0.04 else 1 if abs(change) <= 0.10 else 0
     if abs(change) < 0.005:
-        tempo_text = f"🥁 Rythme : {voice['bpm']:.0f} et {music['bpm']:.0f} BPM, le même tempo, parfait !"
+        tempo_text = f"🥁 Rythme : {follower['bpm']:.0f} et {leader['bpm']:.0f} BPM, le même tempo, parfait !"
     else:
-        tempo_text = (f"🥁 Rythme : {voice['bpm']:.0f} et {music['bpm']:.0f} BPM : la voix chantera "
+        tempo_text = (f"🥁 Rythme : {follower['bpm']:.0f} et {leader['bpm']:.0f} BPM : la platine qui suit ira "
                       f"{abs(change) * 100:.0f} % plus {'vite' if change > 0 else 'lentement'}.")
-
     # Tonalité : on compare les gammes (une gamme mineure = la majeure qui a les mêmes notes)
     shift, key_score = 0, 1
-    kv, km = parse_key(voice.get("key")), parse_key(music.get("key"))
-    if kv and km:
-        major_v = (kv[0] + 3 * kv[1]) % 12
-        major_m = (km[0] + 3 * km[1]) % 12
-        diff = (major_m - major_v) % 12
+    kf, kl = parse_key(follower.get("key")), parse_key(leader.get("key"))
+    if kf and kl:
+        diff = ((kl[0] + 3 * kl[1]) - (kf[0] + 3 * kf[1])) % 12
         diff = diff - 12 if diff > 6 else diff
+        names = f"{follower['key']} et {leader['key']}"
         if diff == 0:
-            key_score, key_text = 2, f"🎼 Tonalité : {voice['key']} et {music['key']}, les mêmes notes, parfait !"
+            key_score, key_text = 2, f"🎼 Tonalité : {names}, les mêmes notes, parfait !"
         elif abs(diff) == 5:
-            key_score, key_text = 2, f"🎼 Tonalité : {voice['key']} et {music['key']}, des gammes amies, ça sonne bien !"
+            key_score, key_text = 2, f"🎼 Tonalité : {names}, des gammes amies, ça sonne bien !"
         else:
             shift = diff
             key_score = 1 if abs(diff) <= 2 else 0
-            key_text = (f"🎼 Tonalité : {voice['key']} et {music['key']} : je "
-                        f"{'monte' if diff > 0 else 'descends'} la voix de {abs(diff)} demi-ton"
-                        f"{'s' if abs(diff) > 1 else ''}" + (" (elle sera un peu bizarre)." if key_score == 0 else "."))
+            key_text = (f"🎼 Tonalité : {names} : je {'monte' if diff > 0 else 'descends'} la platine qui suit de "
+                        f"{abs(diff)} demi-ton{'s' if abs(diff) > 1 else ''}"
+                        + (" (ça sera un peu bizarre)." if key_score == 0 else "."))
     else:
         key_text = "🎼 Tonalité : je ne la connais pas, écoute bien si ça sonne juste !"
-    score = min(tempo_score, key_score)
-    return {"score": score, "ratio": ratio, "shift": shift, "texts": [tempo_text, key_text]}
+    return {"score": min(tempo_score, key_score), "ratio": ratio, "shift": shift, "texts": [tempo_text, key_text]}
 
 
-def voice_start(voice_file, duration, info):
-    """Un moment où la voix chante (après 25 % de la chanson), calé sur un début de mesure."""
+def singing_start(voice_file, info):
+    """Le moment où la voix commence à chanter, ramené au début de la mesure (en secondes)."""
     out = subprocess.run(["ffmpeg", "-v", "info", "-nostats", "-i", str(voice_file),
-                          "-af", "silencedetect=n=-35dB:d=0.8", "-f", "null", "-"],
+                          "-af", "silencedetect=n=-35dB:d=1.5", "-f", "null", "-"],
                          capture_output=True, text=True).stderr
     starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", out)]
     ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", out)]
-    t = duration * 0.25
-    for start, end in zip(starts, ends + [duration]):
-        if start <= t < end:
-            t = end
-    return snap(t, info)
+    t = ends[0] if starts and starts[0] < 0.5 and ends else 0.0
+    period = 4 * 60 / info["bpm"]
+    bars = int((t - info["first_beat"]) // period)
+    return max(0.0, info["first_beat"] + bars * period)
 
 
-def snap(t, info):
-    """Ramène t sur le temps « 1 » d'une mesure de 4 temps, d'après la grille."""
-    period = 60 / info["bpm"]
-    bar = round((t - info["first_beat"]) / (4 * period))
-    return max(0.0, info["first_beat"] + bar * 4 * period)
+class Choice:
+    """Ce que l'enfant a choisi pour une platine."""
+
+    def __init__(self):
+        self.path = None      # chanson déjà dans la bibliothèque
+        self.online = None    # ou résultat Internet {"id", "title", ...} à télécharger
+        self.mode = None
+
+    @property
+    def name(self):
+        return self.path.stem if self.path else (self.online or {}).get("title", "")
+
+    def ready(self):
+        return bool((self.path or self.online) and self.mode)
 
 
-class MashupDialog(QDialog):
-    def __init__(self, library):
-        super().__init__(library)
-        self.library = library
-        self.setWindowTitle("🎤 + 🎶 Faire un mashup")
-        self.resize(1000, 720)
-        self.preview_proc = None
-        self.mixxx = None
+class SongPage(QWidget):
+    """Choisir une chanson et ce qu'on en garde, pour une platine."""
 
+    def __init__(self, wizard, deck):
+        super().__init__()
+        self.wizard = wizard
+        self.choice = Choice()
+        self.search_proc = None
         root = QVBoxLayout(self)
-        intro = QLabel("Choisis <b>la voix</b> d'une chanson et <b>la musique</b> d'une autre. "
-                       "Je te dis si elles vont bien ensemble !")
-        intro.setWordWrap(True)
-        intro.setObjectName("status")
-        root.addWidget(intro)
+        title = QLabel(f"🎚 Platine {deck} : choisis {'ta première' if deck == 1 else 'ta deuxième'} chanson")
+        title.setObjectName("title")
+        root.addWidget(title)
 
-        lists = QHBoxLayout()
-        self.voices = self.make_list(lists, "🎤 La voix de…")
-        self.musics = self.make_list(lists, "🎶 Sur la musique de…")
-        root.addLayout(lists, 1)
+        bar = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("🔎 Tape le nom d'une chanson…")
+        self.search.textChanged.connect(self.filter)
+        self.search.returnPressed.connect(self.search_online)
+        self.online_btn = QPushButton("🌍 Chercher sur Internet")
+        self.online_btn.setMinimumHeight(50)
+        self.online_btn.clicked.connect(self.search_online)
+        bar.addWidget(self.search, 1)
+        bar.addWidget(self.online_btn)
+        root.addLayout(bar)
 
-        verdict = QHBoxLayout()
-        self.smiley = QLabel("🤔")
-        self.smiley.setStyleSheet("font-size: 64px;")
-        self.verdict = QLabel()
-        self.verdict.setWordWrap(True)
-        self.verdict.setMinimumHeight(110)
-        self.verdict.setObjectName("status")
-        verdict.addWidget(self.smiley)
-        verdict.addWidget(self.verdict, 1)
-        root.addLayout(verdict)
+        self.list = QListWidget()
+        self.list.setIconSize(QSize(48, 48))
+        self.list.setWordWrap(True)
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.list.setStyleSheet("QListWidget { font-size: 17px; } QListWidget::item { padding: 5px; }")
+        self.list.currentItemChanged.connect(self.song_chosen)
+        root.addWidget(self.list, 1)
 
-        buttons = QHBoxLayout()
-        self.listen_btn = QPushButton("🎧 Écouter un extrait")
-        self.listen_btn.setObjectName("play")
-        self.mixxx_btn = QPushButton("🎚 Ouvrir dans Mixxx")
-        self.mixxx_btn.setObjectName("done")
-        close = QPushButton("Fermer")
-        close.setObjectName("folder")
-        for button in (self.listen_btn, self.mixxx_btn, close):
+        root.addWidget(QLabel("Et tu veux garder…"))
+        modes = QHBoxLayout()
+        self.mode_group = QButtonGroup(self)
+        for mode, text in MODES.items():
+            button = QPushButton(text)
+            button.setObjectName("mode")
+            button.setCheckable(True)
             button.setMinimumHeight(60)
-            buttons.addWidget(button)
-        self.listen_btn.clicked.connect(self.listen)
-        self.mixxx_btn.clicked.connect(self.open_mixxx)
-        close.clicked.connect(self.close)
-        root.addLayout(buttons)
+            button.setProperty("mode", mode)
+            if mode != "complete" and not wizard.library.separator_ok:
+                button.setEnabled(False)
+                button.setToolTip("Il faut le séparateur de pistes : demande à papa.")
+            self.mode_group.addButton(button)
+            modes.addWidget(button)
+        self.mode_group.buttonClicked.connect(self.mode_chosen)
+        root.addLayout(modes)
+        self.fill_library()
 
-        self.songs = {}  # chemin -> ligne de la bibliothèque (pistes, durée…)
-        for path, row in library.rows.items():
-            if "Voix" in row.stems and "Sans voix" in row.stems:
-                self.songs[path] = row
-        self.fill(self.voices, list(self.songs))
-        self.fill(self.musics, list(self.songs))
-        self.voices.currentItemChanged.connect(self.voice_changed)
-        self.musics.currentItemChanged.connect(lambda *_: self.update_verdict())
-        self.update_verdict()
-
-    def make_list(self, layout, title):
-        column = QVBoxLayout()
-        label = QLabel(title)
-        label.setObjectName("title")
-        widget = QListWidget()
-        widget.setIconSize(QSize(56, 56))
-        widget.setWordWrap(True)
-        widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        widget.setStyleSheet("QListWidget { font-size: 17px; } QListWidget::item { padding: 6px; }")
-        column.addWidget(label)
-        column.addWidget(widget, 1)
-        layout.addLayout(column, 1)
-        return widget
-
-    def fill(self, widget, paths, prefixes=None):
-        widget.blockSignals(True)
-        selected = widget.currentItem().data(Qt.ItemDataRole.UserRole) if widget.currentItem() else None
-        widget.clear()
-        for path in paths:
-            row = self.songs[path]
-            info = self.library.song_info(path)
-            text = f"{path.stem}\n{music_text(info) or '⏳ J’écoute encore le rythme…'}"
-            if prefixes:
-                text = f"{prefixes[path]}  {text}"
-            item = QListWidgetItem(text)
-            item.setData(Qt.ItemDataRole.UserRole, path)
+    def fill_library(self):
+        self.list.clear()
+        for path, row in self.wizard.library.rows.items():
+            info = self.wizard.library.song_info(path)
+            extra = music_text(info)
+            if row.stems:
+                extra += "    ✂️ déjà séparée"
+            item = QListWidgetItem(f"{path.stem}\n{extra}".strip())
+            item.setData(Qt.ItemDataRole.UserRole, ("local", path))
             cover = read_song(path)[3]
             pixmap = QPixmap()
             if cover and pixmap.loadFromData(cover):
                 item.setIcon(QIcon(pixmap))
-            widget.addItem(item)
-            if path == selected:
-                widget.setCurrentItem(item)
-        widget.blockSignals(False)
-        if not paths:
-            widget.addItem("Sépare d'abord des chansons avec ✂️ !")
+            self.list.addItem(item)
+        self.filter()
 
-    def chosen(self, widget):
-        item = widget.currentItem()
-        return item.data(Qt.ItemDataRole.UserRole) if item else None
+    def filter(self):
+        words = self.search.text().lower().split()
+        for i in range(self.list.count()):
+            item = self.list.item(i)
+            data = item.data(Qt.ItemDataRole.UserRole)
+            if data and data[0] == "local":
+                item.setHidden(not all(w in item.text().lower() for w in words))
 
-    def voice_changed(self, *_):
-        """Range les musiques de la plus réussie à la moins réussie avec cette voix."""
-        voice = self.chosen(self.voices)
-        voice_info = self.library.song_info(voice) if voice else None
-        if voice_info:
-            scored = {}
-            for path in self.songs:
-                info = self.library.song_info(path)
-                scored[path] = match(voice_info, info)["score"] if info and path != voice else -1
-            paths = sorted((p for p in self.songs if p != voice), key=lambda p: -scored[p])
-            self.fill(self.musics, paths, {p: SMILEYS[scored[p]] if scored[p] >= 0 else "⏳" for p in paths})
-        self.update_verdict()
+    def search_online(self):
+        import ma_musique as mm  # la recherche YouTube de l'onglet « Chercher »
 
-    def pair(self):
-        """(voix, musique, infos voix, infos musique, accord) ou None."""
-        voice, music = self.chosen(self.voices), self.chosen(self.musics)
-        if not voice or not music:
-            return None
-        vi, mi = self.library.song_info(voice), self.library.song_info(music)
-        if not vi or not mi:
-            return voice, music, vi, mi, None
-        return voice, music, vi, mi, match(vi, mi)
+        query = self.search.text().strip()
+        if not query or self.search_proc:
+            return
+        self.online_btn.setEnabled(False)
+        self.online_btn.setText("⏳ Je cherche…")
+        self.search_proc = mm.ytdlp_process(["--flat-playlist", "--dump-json", f"ytsearch8:{query}"])
+        self.search_proc.finished.connect(lambda *_: self.online_results(mm))
+        self.search_proc.start()
 
-    def update_verdict(self):
-        pair = self.pair()
-        ready = bool(pair and pair[4] and pair[0] != pair[1])
-        self.listen_btn.setEnabled(ready)
-        self.mixxx_btn.setEnabled(ready)
-        if not pair:
-            self.smiley.setText("🤔")
-            self.verdict.setText("Choisis une voix à gauche, puis une musique à droite.")
-        elif pair[0] == pair[1]:
+    def online_results(self, mm):
+        out = bytes(self.search_proc.readAllStandardOutput()).decode(errors="replace")
+        self.search_proc = None
+        self.online_btn.setEnabled(True)
+        self.online_btn.setText("🌍 Chercher sur Internet")
+        for i in reversed(range(self.list.count())):  # on remplace les anciens résultats Internet
+            data = self.list.item(i).data(Qt.ItemDataRole.UserRole)
+            if not data or data[0] != "local":
+                self.list.takeItem(i)
+        found = 0
+        for line in out.splitlines():
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if not entry.get("id") or not entry.get("duration") or entry["duration"] > mm.MAX_DURATION:
+                continue
+            item = QListWidgetItem(f"🌍 {entry.get('title')}\n⬇ à télécharger    ⏱ {mm.fmt_duration(entry['duration'])}")
+            item.setData(Qt.ItemDataRole.UserRole, ("online", entry))
+            self.list.insertItem(found, item)
+            found += 1
+        if not found:
+            self.list.insertItem(0, "😕 Rien trouvé sur Internet… essaie d'écrire autrement !")
+        self.list.scrollToTop()
+
+    def song_chosen(self, item, _previous=None):
+        data = item.data(Qt.ItemDataRole.UserRole) if item else None
+        self.choice.path = data[1] if data and data[0] == "local" else None
+        self.choice.online = data[1] if data and data[0] == "online" else None
+        self.wizard.update_buttons()
+
+    def mode_chosen(self, button):
+        self.choice.mode = button.property("mode")
+        self.wizard.update_buttons()
+
+
+class MashupWizard(QDialog):
+    def __init__(self, library):
+        super().__init__(library)
+        self.library = library
+        self.setWindowTitle("🎤 + 🎶 Créer un mashup")
+        self.resize(1000, 760)
+        self.steps = []
+        self.current = -1
+        self.mixxx = None
+        self.running = False
+
+        root = QVBoxLayout(self)
+        self.stack = QStackedWidget()
+        root.addWidget(self.stack, 1)
+        self.pages = [SongPage(self, 1), SongPage(self, 2)]
+        for page in self.pages:
+            self.stack.addWidget(page)
+        self.stack.addWidget(self.make_summary())
+        self.stack.addWidget(self.make_work())
+
+        nav = QHBoxLayout()
+        self.back_btn = QPushButton("⬅ Retour")
+        self.back_btn.setObjectName("folder")
+        self.next_btn = QPushButton("Suivant ➡")
+        for button in (self.back_btn, self.next_btn):
+            button.setMinimumHeight(60)
+        self.back_btn.clicked.connect(self.back)
+        self.next_btn.clicked.connect(self.next)
+        nav.addWidget(self.back_btn)
+        nav.addStretch()
+        nav.addWidget(self.next_btn)
+        root.addLayout(nav)
+        library.job_progress.connect(self.job_progress)
+        library.job_done.connect(self.job_done)
+        self.update_buttons()
+
+    # --- Pages ---
+    def make_summary(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        title = QLabel("🎛 Ton mashup")
+        title.setObjectName("title")
+        layout.addWidget(title)
+        self.summary = QLabel()
+        self.summary.setWordWrap(True)
+        self.summary.setObjectName("status")
+        layout.addWidget(self.summary)
+        verdict = QHBoxLayout()
+        self.smiley = QLabel()
+        self.smiley.setStyleSheet("font-size: 64px;")
+        self.verdict = QLabel()
+        self.verdict.setWordWrap(True)
+        self.verdict.setObjectName("status")
+        verdict.addWidget(self.smiley)
+        verdict.addWidget(self.verdict, 1)
+        layout.addLayout(verdict)
+        layout.addStretch()
+        return page
+
+    def make_work(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        title = QLabel("🛠 Je prépare ton mashup…")
+        title.setObjectName("title")
+        layout.addWidget(title)
+        self.steps_label = QLabel()
+        self.steps_label.setObjectName("status")
+        self.steps_label.setWordWrap(True)
+        layout.addWidget(self.steps_label)
+        layout.addStretch()
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 1000)
+        self.progress.setMinimumHeight(40)
+        layout.addWidget(self.progress)
+        self.work_status = QLabel()
+        self.work_status.setObjectName("status")
+        self.work_status.setWordWrap(True)
+        layout.addWidget(self.work_status)
+        self.close_mixxx_btn = QPushButton("🛑 Fermer Mixxx pour moi")
+        self.close_mixxx_btn.setObjectName("error")
+        self.close_mixxx_btn.setMinimumHeight(60)
+        self.close_mixxx_btn.hide()
+        self.close_mixxx_btn.clicked.connect(self.close_mixxx)
+        layout.addWidget(self.close_mixxx_btn)
+        return page
+
+    def update_buttons(self):
+        index = self.stack.currentIndex()
+        self.back_btn.setVisible(index in (1, 2) or (index == 3 and not self.running))
+        self.next_btn.setVisible(index < 3 or not self.running)
+        if index < 2:
+            self.next_btn.setText("Suivant ➡")
+            self.next_btn.setEnabled(self.pages[index].choice.ready())
+            self.next_btn.setObjectName("")
+        elif index == 2:
+            self.next_btn.setText("🚀 Lancer le mashup !")
+            self.next_btn.setEnabled(True)
+            self.next_btn.setObjectName("done")
+        else:
+            self.next_btn.setText("Fermer")
+            self.next_btn.setObjectName("folder")
+        self.next_btn.style().unpolish(self.next_btn)
+        self.next_btn.style().polish(self.next_btn)
+
+    def back(self):
+        index = self.stack.currentIndex()
+        self.stack.setCurrentIndex(1 if index == 3 else max(0, index - 1))
+        self.update_buttons()
+
+    def next(self):
+        index = self.stack.currentIndex()
+        if index == 3:
+            self.close()
+            return
+        self.stack.setCurrentIndex(index + 1)
+        if index + 1 == 2:
+            self.show_summary()
+        elif index + 1 == 3:
+            self.start()
+        self.update_buttons()
+
+    # --- Récapitulatif ---
+    def roles(self):
+        """(platine qui suit, platine qui mène) : une voix suit toujours la musique de l'autre platine."""
+        modes = [page.choice.mode for page in self.pages]
+        if modes[1] == "voix" and modes[0] != "voix":
+            return 1, 0
+        return 0, 1
+
+    def show_summary(self):
+        lines = [f"<b>Platine {i + 1}</b> : {MODES[p.choice.mode]} de « {p.choice.name} »"
+                 + (" <i>(je vais la télécharger)</i>" if p.choice.online else "") for i, p in enumerate(self.pages)]
+        self.summary.setText("<br>".join(lines))
+        follower, leader = self.roles()
+        infos = [self.library.song_info(p.choice.path) if p.choice.path else None for p in self.pages]
+        same = self.pages[0].choice.name == self.pages[1].choice.name
+        if same and self.pages[0].choice.mode == self.pages[1].choice.mode:
             self.smiley.setText("🙃")
-            self.verdict.setText("C'est la même chanson ! Choisis une autre musique.")
-        elif not pair[4]:
-            self.smiley.setText("⏳")
-            self.verdict.setText("J'écoute encore le rythme de ces chansons, attends un petit peu…")
-            QTimer.singleShot(3000, self.update_verdict)
-        else:
-            result = pair[4]
+            self.verdict.setText("C'est deux fois la même chose ! Tu peux quand même essayer…")
+        elif infos[0] and infos[1]:
+            result = match(infos[follower], infos[leader])
+            advice = ["Ça risque de sonner bizarre… mais tu peux essayer !", "Ça peut marcher !",
+                      "Ça va super bien ensemble !"][result["score"]]
             self.smiley.setText(SMILEYS[result["score"]])
-            advice = ["Ça va super bien ensemble !", "Ça peut marcher, écoute l'extrait !",
-                      "Ça risque de sonner bizarre… mais tu peux essayer !"][2 - result["score"]]
             self.verdict.setText(f"<b>{advice}</b><br>" + "<br>".join(result["texts"]))
-
-    # --- Écouter un extrait ---
-    def listen(self):
-        pair = self.pair()
-        if not pair or not pair[4] or self.preview_proc:
-            return
-        voice, music, vi, mi, result = pair
-        if self.library.playing and self.library.playing[0] is self.listen_btn:
-            self.library.toggle_play(PREVIEW, self.listen_btn, "🎧 Écouter un extrait")  # arrête
-            return
-        self.library.stop_playing()
-        self.listen_btn.setText("⏳ Je prépare…")
-        QApplication.processEvents()
-        voice_file = self.songs[voice].stems["Voix"]
-        music_file = self.songs[music].stems["Sans voix"]
-        vstart = voice_start(voice_file, self.songs[voice].duration, vi)
-        mstart = snap(self.songs[music].duration * 0.3, mi)
-        tempo = result["ratio"]
-        pitch = 2 ** (result["shift"] / 12)
-        PREVIEW.parent.mkdir(parents=True, exist_ok=True)
-        self.preview_proc = QProcess(self)
-        self.preview_proc.setProgram("ffmpeg")
-        self.preview_proc.setArguments([
-            "-v", "error", "-y",
-            "-ss", f"{vstart:.3f}", "-t", f"{PREVIEW_SECONDS * tempo + 1:.3f}", "-i", str(voice_file),
-            "-ss", f"{mstart:.3f}", "-t", f"{PREVIEW_SECONDS}", "-i", str(music_file),
-            "-filter_complex",
-            f"[0:a]rubberband=tempo={tempo:.5f}:pitch={pitch:.5f}:pitchq=quality,volume=1.2[v];"
-            f"[v][1:a]amix=inputs=2:duration=shortest:normalize=0,"
-            f"afade=t=in:d=1,afade=t=out:st={PREVIEW_SECONDS - 2}:d=2[a]",
-            "-map", "[a]", "-c:a", "libmp3lame", "-q:a", "2", str(PREVIEW)])
-        self.preview_proc.finished.connect(self.preview_ready)
-        self.preview_proc.start()
-
-    def preview_ready(self, code, _status):
-        self.preview_proc = None
-        self.listen_btn.setText("🎧 Écouter un extrait")
-        if code == 0:
-            self.library.toggle_play(PREVIEW, self.listen_btn, "🎧 Écouter un extrait")
         else:
-            self.verdict.setText("😕 Je n'ai pas réussi à préparer l'extrait.")
+            self.smiley.setText("🤔")
+            self.verdict.setText("Je ne connais pas encore le rythme de ces chansons : je vais l'écouter, "
+                                 "puis je calerai tout dans Mixxx.")
 
-    # --- Ouvrir dans Mixxx ---
-    def open_mixxx(self):
-        import mixeur  # le pilotage de Mixxx de Bip (contrôleur virtuel)
+    # --- Le travail ---
+    def start(self):
+        self.running = True
+        self.steps = []
+        for i, page in enumerate(self.pages):
+            choice = page.choice
+            if choice.online:
+                self.steps.append({"kind": "telechargement", "deck": i, "text": f"⬇ Télécharger « {choice.name} »"})
+            if choice.mode != "complete":
+                self.steps.append({"kind": "separation", "deck": i, "text": f"✂️ Séparer « {choice.name} »"})
+            self.steps.append({"kind": "analyse", "deck": i, "text": f"🥁 Écouter le rythme de « {choice.name} »"})
+        self.steps.append({"kind": "mixxx", "text": "🎚 Préparer Mixxx et caler les platines"})
+        for step in self.steps:
+            step.update(state="todo", fraction=0.0)
+        self.current = -1
+        self.next_step()
 
-        pair = self.pair()
-        if not pair or not pair[4] or self.mixxx:
+    def show_steps(self):
+        icons = {"todo": "⬜", "busy": "⏳", "done": "✅", "skip": "✅", "fail": "❌"}
+        self.steps_label.setText("<br>".join(f"{icons[s['state']]} {s['text']}" for s in self.steps))
+        total = sum(WEIGHTS[s["kind"]] for s in self.steps)
+        done = sum(WEIGHTS[s["kind"]] * (1 if s["state"] in ("done", "skip") else s["fraction"]) for s in self.steps)
+        self.progress.setValue(int(done / total * 1000))
+        self.progress.setFormat(f"{done / total * 100:.0f} %")
+
+    def step(self):
+        return self.steps[self.current]
+
+    def set_fraction(self, fraction):
+        self.step()["fraction"] = max(0.0, min(1.0, fraction))
+        self.show_steps()
+
+    def finish_step(self, ok=True, message=None):
+        self.step()["state"] = "done" if ok else "fail"
+        self.show_steps()
+        if not ok:
+            self.running = False
+            self.work_status.setText(message or "😕 Oups, ça n'a pas marché. Réessaie, ou demande à papa.")
+            self.update_buttons()
             return
-        self.library.stop_playing()
+        self.next_step()
+
+    def next_step(self):
+        while True:
+            self.current += 1
+            if self.current >= len(self.steps):
+                return
+            step = self.step()
+            choice = self.pages[step["deck"]].choice if "deck" in step else None
+            # Déjà fait ? (chanson déjà séparée, rythme déjà connu)
+            if (step["kind"] == "separation" and stems_of(choice.path)) or \
+                    (step["kind"] == "analyse" and self.library.song_info(choice.path)):
+                step["state"] = "skip"
+                continue
+            break
+        step["state"] = "busy"
+        self.show_steps()
+        if step["kind"] == "telechargement":
+            self.download(choice)
+        elif step["kind"] == "separation":
+            self.library.refresh()
+            minutes = max(1, round(self.library.rows[choice.path].duration * 1.5 / 60))
+            self.work_status.setText(f"✂️ Je découpe « {choice.name} »… environ {minutes} min. "
+                                     "Tu peux faire autre chose en attendant !")
+            row = self.library.rows[choice.path]
+            if not self.library.busy_row(row):
+                self.library.enqueue(row)
+        elif step["kind"] == "analyse":
+            self.work_status.setText(f"🥁 J'écoute le rythme et la tonalité de « {choice.name} »…")
+            self.set_fraction(0.3)
+            self.library.request_analysis(choice.path)
+        else:
+            self.prepare_mixxx()
+
+    # Téléchargement (comme l'onglet « Chercher »)
+    def download(self, choice):
+        import ma_musique as mm
+
+        self.work_status.setText(f"⬇ Je télécharge « {choice.name} »…")
+        proc = mm.download_process(choice.online["id"])
+
+        def output():
+            for line in bytes(proc.readAllStandardOutput()).decode(errors="replace").splitlines():
+                progress = mm.parse_progress(line)
+                if progress:
+                    self.set_fraction(progress[0] / 100)
+
+        def done(*_):
+            final = mm.finalize_download(choice.online["id"])
+            if not final:
+                self.finish_step(False, "😕 Le téléchargement n'a pas marché. Réessaie dans un moment !")
+                return
+            choice.path, choice.online = final, None
+            self.library.refresh()
+            self.finish_step()
+
+        proc.readyReadStandardOutput.connect(output)
+        proc.finished.connect(done)
+        self.download_proc = proc
+        proc.start()
+
+    # Séparation et analyse : faites par la bibliothèque, qui nous prévient
+    def job_progress(self, path, fraction):
+        if self.running and 0 <= self.current < len(self.steps) and self.step()["kind"] == "separation" \
+                and self.pages[self.step()["deck"]].choice.path == path:
+            self.set_fraction(fraction)
+
+    def job_done(self, kind, path, ok):
+        if not self.running or not 0 <= self.current < len(self.steps):
+            return
+        step = self.step()
+        if step["kind"] == kind and self.pages[step["deck"]].choice.path == path:
+            self.finish_step(ok, None if ok else ("😕 La séparation n'a pas marché." if kind == "separation"
+                                                  else "😕 Je n'ai pas trouvé le rythme de cette chanson."))
+
+    # --- Mixxx ---
+    def deck_file(self, i):
+        choice = self.pages[i].choice
+        return choice.path if choice.mode == "complete" else stems_of(choice.path)[STEM_OF_MODE[choice.mode]]
+
+    def prepare_mixxx(self):
+        import mixeur  # le pilotage de Mixxx de Bip
+
         if not mixeur.mixxx_configured():
-            self.verdict.setText("Mixxx n'a encore jamais été ouvert. Demande à papa de l'ouvrir une première fois !")
+            self.finish_step(False, "Mixxx n'a encore jamais été ouvert. Demande à papa de l'ouvrir une première fois !")
             return
-        voice, music, _, _, result = pair
-        self.mixxx = {"files": [self.songs[voice].stems["Voix"], self.songs[music].stems["Sans voix"]],
-                      "shift": result["shift"], "step": "closed", "deadline": time.time() + 180,
-                      "mixeur": mixeur, "timer": QTimer(self)}
+        follower, leader = self.roles()
+        infos = [self.library.song_info(p.choice.path) for p in self.pages]
+        result = match(infos[follower], infos[leader])
+        starts = [singing_start(self.deck_file(i), infos[i]) if page.choice.mode == "voix" else 0.0
+                  for i, page in enumerate(self.pages)]
+        self.mixxx = {"mixeur": mixeur, "shift": result["shift"], "leader": leader + 1, "starts": starts,
+                      "step": "closed", "deadline": time.time() + 600, "timer": QTimer(self)}
         self.mixxx["timer"].timeout.connect(self.mixxx_tick)
-        self.mixxx_btn.setEnabled(False)
-        if mixeur.mixxx_running():
-            self.verdict.setText("<b>Ferme Mixxx</b>, je le rouvre avec ton mashup dès qu'il est fermé 😉")
-        self.mixxx["timer"].start(1500)
+        self.mixxx["timer"].start(1000)
         self.mixxx_tick()
+
+    def close_mixxx(self):
+        subprocess.run(["pkill", "-TERM", "-x", "mixxx"])
+        self.close_mixxx_btn.setEnabled(False)
+        self.close_mixxx_btn.setText("⏳ Je ferme Mixxx…")
 
     def launch_mixxx(self):
         mixeur = self.mixxx["mixeur"]
-        self.library.sync_mixxx()  # Mixxx est fermé : on donne leur grille aux pistes
+        self.close_mixxx_btn.hide()
+        self.library.sync_mixxx()  # Mixxx est fermé : les pistes séparées reçoivent la grille de leur chanson
         mixeur.configure_mixxx()
         if mixeur.MIXXX_LOG.exists():
             mixeur.MIXXX_LOG.replace(mixeur.MIXXX_LOG.with_suffix(".log.avant-bip"))
@@ -309,12 +529,24 @@ class MashupDialog(QDialog):
         env = QProcessEnvironment.systemEnvironment()
         env.remove("QT_QPA_PLATFORM")
         proc.setProcessEnvironment(env)
-        proc.setArguments(["--log-flush-level", "warning", *map(str, self.mixxx["files"])])
+        proc.setArguments(["--log-flush-level", "warning", str(self.deck_file(0)), str(self.deck_file(1))])
         proc.setStandardOutputFile(QProcess.nullDevice())
         proc.setStandardErrorFile(QProcess.nullDevice())
         proc.startDetached()
-        self.verdict.setText("🎧 J'ouvre Mixxx avec ton mashup…")
+        self.work_status.setText("🎧 J'ouvre Mixxx avec tes deux chansons…")
+        self.set_fraction(0.4)
         self.mixxx.update(step="received", deadline=time.time() + 120)
+
+    def send_setup(self):
+        """Envoie tous les réglages puis l'ordre « prépare », en un seul message (donc dans l'ordre)."""
+        job = self.mixxx
+        data = [CC_SHIFT, 64 + job["shift"], CC_LEADER, job["leader"]]
+        for cc, seconds in ((CC_START1, job["starts"][0]), (CC_START2, job["starts"][1])):
+            tenths = min(16383, int(seconds * 10))
+            data += [cc, tenths >> 7, cc + 1, tenths & 0x7F]
+        data += [CC_PREPARE, MODE_MASHUP]
+        message = " ".join(f"B0 {data[i]:02X} {data[i + 1]:02X}" for i in range(0, len(data), 2))
+        QProcess.startDetached("amidi", ["-p", job["mixeur"].MIDI_PORT, "-S", message])
 
     def log_has(self, message):
         try:
@@ -326,31 +558,44 @@ class MashupDialog(QDialog):
         job = self.mixxx
         mixeur = job["mixeur"]
         if time.time() > job["deadline"]:
-            self.mixxx_finished("Mixxx est ouvert avec la voix sur la platine 1 et la musique sur la platine 2. "
-                                "Appuie sur SYNC et lance les deux !" if job["step"] != "closed" else
-                                "Mixxx est toujours ouvert. Ferme-le et réessaie !")
+            if job["step"] == "closed":
+                self.mixxx_finished(False, "Mixxx est toujours ouvert. Ferme-le et relance le mashup !")
+            else:
+                self.mixxx_finished(True, "Mixxx est ouvert avec tes deux chansons. Je n'ai pas pu les caler "
+                                          "tout seul : allume SYNC sur les deux platines et lance-les !")
         elif job["step"] == "closed":
-            if not mixeur.mixxx_running():
+            if mixeur.mixxx_running():
+                self.work_status.setText("Mixxx est ouvert : je dois le fermer pour y mettre ton mashup.")
+                self.close_mixxx_btn.show()
+            else:
                 self.launch_mixxx()
         elif job["step"] == "received":
             if self.log_has("RECU"):
-                self.verdict.setText("🎚 Je cale la voix sur la musique…")
+                self.work_status.setText("🎚 Je cale les deux platines…")
+                self.set_fraction(0.8)
                 job.update(step="ready", deadline=time.time() + 90)
             else:
-                mixeur.send_midi(CC_SHIFT, 64 + job["shift"])
-                mixeur.send_midi(mixeur.CC_PREPARE, MODE_MASHUP)
-        elif job["step"] == "ready" and self.log_has("PRET_MASHUP"):
-            self.mixxx_finished("🎉 C'est parti ! La musique joue sur la platine 2 et la voix suit sur la platine 1. "
-                                "Joue avec le crossfader et les volumes. Pour faire chanter un autre moment, "
-                                "clique ailleurs sur la forme d'onde de la voix : elle reste calée !")
+                self.send_setup()
+        elif job["step"] == "ready":
+            if self.log_has("PRET_MASHUP"):
+                self.mixxx_finished(True, "🎉 C'est parti ! Les deux platines jouent, calées sur le même tempo. "
+                                          "Joue avec le crossfader et les volumes. Pour changer de moment, "
+                                          "clique ailleurs sur une forme d'onde : ça reste calé !")
+            elif self.log_has("PRET_SANS_SYNC"):
+                self.mixxx_finished(True, "Les deux platines jouent, mais je n'ai pas trouvé le rythme d'une des "
+                                          "deux : cale-les à l'oreille avec SYNC !")
 
-    def mixxx_finished(self, message):
+    def mixxx_finished(self, ok, message):
         self.mixxx["timer"].stop()
         self.mixxx = None
-        self.verdict.setText(message)
-        self.mixxx_btn.setEnabled(True)
+        self.close_mixxx_btn.hide()
+        self.finish_step(ok, message)
+        if ok:
+            self.work_status.setText(message)
+            self.running = False
+            self.update_buttons()
 
     def closeEvent(self, event):
-        if self.library.playing and self.library.playing[0] is self.listen_btn:
-            self.library.stop_playing()
+        if self.mixxx:
+            self.mixxx["timer"].stop()
         super().closeEvent(event)

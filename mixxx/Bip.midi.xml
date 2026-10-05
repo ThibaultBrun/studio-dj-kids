@@ -26,12 +26,52 @@
                 <midino>0x71</midino>
                 <options><script-binding/></options>
             </control>
-            <!-- CC 0x73 : demi-tons de la voix du mashup (64 = aucun) -->
+            <!-- CC 0x73 : demi-tons de la platine qui suit, dans un mashup (64 = aucun) -->
             <control>
                 <group>[Master]</group>
                 <key>Bip.setShift</key>
                 <status>0xB0</status>
                 <midino>0x73</midino>
+                <options><script-binding/></options>
+            </control>
+            <!-- CC 0x74 : platine meneuse du mashup (1 ou 2) -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.setLeader</key>
+                <status>0xB0</status>
+                <midino>0x74</midino>
+                <options><script-binding/></options>
+            </control>
+            <!-- CC 0x75 : départ platine 1, poids fort (dixièmes de seconde) -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.setStartHigh</key>
+                <status>0xB0</status>
+                <midino>0x75</midino>
+                <options><script-binding/></options>
+            </control>
+            <!-- CC 0x76 : départ platine 1, poids faible -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.setStartLow</key>
+                <status>0xB0</status>
+                <midino>0x76</midino>
+                <options><script-binding/></options>
+            </control>
+            <!-- CC 0x77 : départ platine 2, poids fort -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.setStartHigh</key>
+                <status>0xB0</status>
+                <midino>0x77</midino>
+                <options><script-binding/></options>
+            </control>
+            <!-- CC 0x78 : départ platine 2, poids faible -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.setStartLow</key>
+                <status>0xB0</status>
+                <midino>0x78</midino>
                 <options><script-binding/></options>
             </control>
             <!-- CC 0x72 : tout arrêter -->

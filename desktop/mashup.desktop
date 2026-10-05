@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Créer un mashup
+Comment=Mélanger la voix d'une chanson et la musique d'une autre, puis tout caler dans Mixxx
+Exec=python3 /home/djpiloupilou/.local/share/ma-musique/ma_musique.py --mashup
+Icon=media-playlist-shuffle
+Terminal=false
+Categories=AudioVideo;Audio;

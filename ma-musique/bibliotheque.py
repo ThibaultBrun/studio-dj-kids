@@ -314,6 +314,10 @@ class SongRow(QFrame):
 
 
 class Bibliotheque(QWidget):
+    # Pour l'assistant mashup : avancement (chemin, 0 à 1) et fin (« separation » ou « analyse », chemin, réussi)
+    job_progress = pyqtSignal(object, float)
+    job_done = pyqtSignal(str, object, bool)
+
     def __init__(self, status):
         super().__init__()
         self.status = status  # la barre d'état de la fenêtre
@@ -339,7 +343,7 @@ class Bibliotheque(QWidget):
         self.filter.setPlaceholderText("🔎 Retrouver une chanson…")
         self.filter.textChanged.connect(self.apply_filter)
         bar.addWidget(self.filter, 1)
-        mashup = QPushButton("🎤 + 🎶 Faire un mashup")
+        mashup = QPushButton("🎤 + 🎶 Créer un mashup")
         mashup.setObjectName("mashup")
         mashup.setMinimumHeight(56)
         mashup.setToolTip("Mettre la voix d'une chanson sur la musique d'une autre")
@@ -425,9 +429,17 @@ class Bibliotheque(QWidget):
         self.next_job()
 
     def open_mashup(self):
-        from mashup import MashupDialog  # chargé à la demande (il réutilise le pilotage de Mixxx de Bip)
+        from mashup import MashupWizard  # chargé à la demande (il réutilise le pilotage de Mixxx de Bip)
         self.refresh()
-        MashupDialog(self).exec()
+        MashupWizard(self).exec()
+        self.refresh()
+
+    def request_analysis(self, path):
+        """Analyse cette chanson en priorité (pour l'assistant mashup)."""
+        if path in self.to_analyse:
+            self.to_analyse.remove(path)
+        self.to_analyse.insert(0, path)
+        self.next_job()
 
     # --- Écouter ---
     def toggle_play(self, path, button, text):
@@ -510,6 +522,7 @@ class Bibliotheque(QWidget):
             ANALYSES_FILE.write_text(json.dumps(self.analyses, indent=1, ensure_ascii=False))
         if path in self.rows:
             self.rows[path].set_music(self.song_info(path))
+        self.job_done.emit("analyse", path, bool(self.song_info(path)))
         self.sync_mixxx()
         self.next_job()
 
@@ -546,7 +559,9 @@ class Bibliotheque(QWidget):
                     percent = done / total * 90
                     row.set_progress(percent, f"✂️ Je découpe… {percent:.0f} %")
                 else:
-                    row.set_progress(90 + done / total * 10, "💾 Je range les pistes…")
+                    percent = 90 + done / total * 10
+                    row.set_progress(percent, "💾 Je range les pistes…")
+                self.job_progress.emit(row.path, percent / 100)
             elif words[0] == "FINI":
                 job["ok"] = True
 
@@ -569,6 +584,7 @@ class Bibliotheque(QWidget):
             row.progress.hide()
             row.set_state("error", "❌ Réessayer", enabled=True)
             self.status.setText("😕 Oups, la séparation n'a pas marché. Réessaie, ou demande à papa.")
+        self.job_done.emit("separation", row.path, job["ok"])
         self.sync_mixxx()
         self.next_job()
 
