@@ -446,4 +446,6 @@ if __name__ == "__main__":
     if "--mashup" in sys.argv:  # raccourci « Créer un mashup » : on ouvre directement l'assistant
         window.tabs.setCurrentWidget(window.library)
         QTimer.singleShot(300, window.library.open_mashup)
+    elif "--bibliotheque" in sys.argv:  # bouton « Ma bibliothèque » de Bip
+        window.tabs.setCurrentWidget(window.library)
     sys.exit(app.exec())

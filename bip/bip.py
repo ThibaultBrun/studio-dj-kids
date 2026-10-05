@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-"""Bip : petit assistant IA local (Ollama) pour aider un enfant à utiliser ses logiciels."""
+"""Bip : le copain de l'enfant pour faire de la musique.
+
+D'abord de gros boutons (mashup, mix automatique, ouvrir ses logiciels, fiches d'aide), et en option
+une discussion avec une petite IA locale (Ollama) pour les questions.
+"""
 import html
 import json
 import re
+import shlex
 import sys
 import unicodedata
 from datetime import datetime
 from pathlib import Path
 
 from mutagen.id3 import ID3, ID3NoHeaderError
-from PyQt6.QtCore import QByteArray, QSize, QTimer, QUrl
+from PyQt6.QtCore import QByteArray, QProcess, QSize, Qt, QTimer, QUrl
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from PyQt6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-                             QTextBrowser, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+                             QStackedWidget, QTextBrowser, QVBoxLayout, QWidget)
 
 import mixeur
 from voix import Listener, Speaker, complete_sentences
@@ -28,6 +33,11 @@ KEEP_ALIVE = "60m"
 MAX_HISTORY = 6  # nombre de messages précédents gardés en mémoire
 
 SUGGESTIONS = ["Comment on mixe dans Mixxx ?", "Fais-moi un mix hip-hop pour scratcher", "Je veux faire un jeu vidéo"]
+APPS_DIR = Path.home() / ".local/share/applications"
+MA_MUSIQUE = Path.home() / ".local/share/ma-musique/ma_musique.py"
+# Les fiches d'aide proposées en boutons (les autres restent pour la discussion)
+HELP_TOPICS = {"Mixxx": "🎧", "Ma Musique": "🎵", "Mashup": "🎤", "Mon Studio": "🎹", "LMMS": "🥁",
+               "Hydrogen": "🥁", "Ordinateur": "🖥"}
 
 STYLE = """
 QWidget { font-size: 16px; }
@@ -52,8 +62,14 @@ QPushButton#mic:disabled { background: #9e9e9e; }
 QPushButton#yes { background: #43a047; font-size: 18px; min-height: 48px; }
 QPushButton#no { background: #e53935; font-size: 18px; min-height: 48px; }
 QPushButton#voice { background: transparent; font-size: 26px; padding: 2px 6px; }
-QPushButton#mashup { background: #e91e63; font-size: 19px; min-height: 52px; }
+QPushButton#tile { min-height: 100px; padding: 0; }
+QPushButton#mashup { background: #e91e63; min-height: 100px; padding: 0; }
 QPushButton#mashup:hover { background: #c2185b; }
+QPushButton#mixxx { background: #8e24aa; font-size: 17px; min-height: 52px; }
+QPushButton#menu { background: #607d8b; }
+QPushButton#topic { background: #eef4fc; color: #1a3d66; border: 2px solid #4a90e2; text-align: left;
+                    font-size: 18px; min-height: 48px; }
+QLabel#question { font-size: 20px; font-weight: bold; color: #1a3d66; }
 """
 
 
@@ -138,16 +154,163 @@ class Bip(QWidget):
         self.voice_btn.setText("🔊")
         top.addWidget(header, 1)
         top.addWidget(self.voice_btn)
-        sub = QLabel("Pose-moi une question sur tes logiciels !")
-        sub.setObjectName("sub")
-        sub.setWordWrap(True)
         root.addLayout(top)
-        root.addWidget(sub)
-        mashup = QPushButton("🎤 + 🎶 Créer un mashup")
-        mashup.setObjectName("mashup")
-        mashup.setToolTip("Mettre la voix d'une chanson sur la musique d'une autre : je m'occupe de tout !")
-        mashup.clicked.connect(self.open_mashup)
-        root.addWidget(mashup)
+
+        self.pages = QStackedWidget()
+        root.addWidget(self.pages, 1)
+        self.menu_page = self.make_menu()
+        self.mix_page = self.make_mix_menu()
+        self.help_page = self.make_help()
+        self.chat_page = self.make_chat()
+        for page in (self.menu_page, self.mix_page, self.help_page, self.chat_page):
+            self.pages.addWidget(page)
+
+        # Les boutons pour piloter Mixxx n'apparaissent que quand il est ouvert
+        self.mixxx_timer = QTimer(self)
+        self.mixxx_timer.timeout.connect(self.update_mixxx_buttons)
+        self.mixxx_timer.start(3000)
+        self.update_mixxx_buttons()
+
+        self.ai_awake = False  # l'IA ne se réveille que si on ouvre la discussion (elle prend la carte graphique)
+        self.bubbles.append(("bip", "Salut ! 🤖 Pose-moi ta question, ou demande-moi un mix ou un mashup."))
+        self.render()
+
+    # --- Pages ---
+    def back_button(self):
+        button = QPushButton("⬅ Menu")
+        button.setObjectName("menu")
+        button.clicked.connect(self.show_menu)
+        return button
+
+    def tile(self, emoji, text, action, name="tile"):
+        """Gros bouton : un grand emoji au-dessus du texte."""
+        button = QPushButton()
+        button.setObjectName(name)
+        button.clicked.connect(action)
+        layout = QVBoxLayout(button)
+        layout.setContentsMargins(4, 6, 4, 6)
+        layout.setSpacing(0)
+        for content, size in ((emoji, 30), (text, 17)):
+            label = QLabel(content)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setWordWrap(True)
+            label.setStyleSheet(f"font-size: {size}px; font-weight: bold; color: white; background: transparent;")
+            label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+            layout.addWidget(label)
+        return button
+
+    def make_menu(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        question = QLabel("Qu'est-ce qu'on fait ? 😀")
+        question.setObjectName("question")
+        layout.addWidget(question)
+        grid = QGridLayout()
+        tiles = [
+            ("🎤🎶", "Créer un\nmashup", self.open_mashup, "mashup"),
+            ("🎧", "Lancer\nun mix", lambda: self.pages.setCurrentWidget(self.mix_page), "tile"),
+            ("🎵", "Télécharger\nune chanson", lambda: self.launch_ma_musique(), "tile"),
+            ("📚", "Ma\nbibliothèque", lambda: self.launch_ma_musique("--bibliotheque"), "tile"),
+            ("🎹", "Composer\nun morceau", lambda: self.launch_app("mon-studio", "J'ouvre Mon Studio 🎹"), "tile"),
+            ("🥁", "Faire\ndes beats", lambda: self.launch_app("lmms-beats", "J'ouvre LMMS 🥁"), "tile"),
+            ("❓", "Comment\non fait… ?", lambda: self.pages.setCurrentWidget(self.help_page), "tile"),
+            ("💬", "Parler\nà Bip", self.show_chat, "tile"),
+        ]
+        for i, (emoji, text, action, name) in enumerate(tiles):
+            grid.addWidget(self.tile(emoji, text, action, name), i // 2, i % 2)
+        layout.addLayout(grid)
+
+        self.mixxx_box = QWidget()
+        mixxx = QVBoxLayout(self.mixxx_box)
+        mixxx.setContentsMargins(0, 8, 0, 0)
+        label = QLabel("🎛 Dans Mixxx :")
+        label.setObjectName("question")
+        mixxx.addWidget(label)
+        row = QHBoxLayout()
+        transition = QPushButton("⏭ Enchaîner")
+        transition.setObjectName("mixxx")
+        transition.setToolTip("Passer en douceur de la platine de gauche à celle de droite")
+        transition.clicked.connect(self.mixxx_transition)
+        stop = QPushButton("⏹ Stop")
+        stop.setObjectName("no")
+        stop.clicked.connect(self.mixxx_stop)
+        row.addWidget(transition, 2)
+        row.addWidget(stop, 1)
+        mixxx.addLayout(row)
+        layout.addWidget(self.mixxx_box)
+
+        self.menu_status = QLabel()
+        self.menu_status.setObjectName("sub")
+        self.menu_status.setWordWrap(True)
+        layout.addWidget(self.menu_status)
+        layout.addStretch()
+        return page
+
+    def make_mix_menu(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.back_button())
+        question = QLabel("🎧 Quel mix ?")
+        question.setObjectName("question")
+        layout.addWidget(question)
+        hint = QLabel("Je trouve les chansons, j'ouvre Mixxx et je les cale pour toi.")
+        hint.setObjectName("sub")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        emojis = {"hip": "🎤", "électro": "⚡", "electro": "⚡", "disco": "🪩"}
+        for ambiance in mixeur.load_ambiances():
+            emoji = next((e for k, e in emojis.items() if k in ambiance["name"].lower()), "🎶")
+            button = self.tile(emoji, ambiance["name"], lambda _, a=ambiance: self.mix_ambiance(a))
+            button.setMinimumHeight(70)
+            layout.addWidget(button)
+        choose = self.tile("✍️", "Je choisis mes deux chansons", self.mix_my_songs)
+        choose.setMinimumHeight(70)
+        layout.addWidget(choose)
+        layout.addStretch()
+        return page
+
+    def make_help(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.back_button())
+        question = QLabel("❓ Comment on fait… ?")
+        question.setObjectName("question")
+        layout.addWidget(question)
+        self.topics = QWidget()
+        topics = QVBoxLayout(self.topics)
+        topics.setContentsMargins(0, 0, 0, 0)
+        names = [f["name"] for f in self.fiches]
+        for name, emoji in HELP_TOPICS.items():
+            if name in names:
+                button = QPushButton(f"{emoji}  {name}")
+                button.setObjectName("topic")
+                button.clicked.connect(lambda _, n=name: self.show_fiche(n))
+                topics.addWidget(button)
+        others = QPushButton("💬  Autre chose : demande à Bip")
+        others.setObjectName("topic")
+        others.clicked.connect(self.show_chat)
+        topics.addWidget(others)
+        layout.addWidget(self.topics)
+        self.fiche_view = QTextBrowser()
+        self.fiche_view.setOpenLinks(False)
+        self.fiche_view.hide()
+        layout.addWidget(self.fiche_view, 1)
+        self.fiche_back = QPushButton("⬅ Les autres fiches")
+        self.fiche_back.setObjectName("menu")
+        self.fiche_back.clicked.connect(self.show_topics)
+        self.fiche_back.hide()
+        layout.addWidget(self.fiche_back)
+        layout.addStretch()
+        return page
+
+    def make_chat(self):
+        page = QWidget()
+        root = QVBoxLayout(page)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(self.back_button())
 
         self.view = QTextBrowser()
         self.view.setOpenLinks(False)
@@ -201,11 +364,80 @@ class Bip(QWidget):
         reset.setObjectName("reset")
         reset.clicked.connect(self.reset)
         root.addWidget(reset)
+        return page
 
-        self.bubbles.append(("bip", "Salut ! Je suis Bip 🤖\nJe me réveille, ça prend quelques secondes…"))
-        self.render()
-        self.set_busy(True)
-        self.warm_up()
+    # --- Navigation ---
+    def show_menu(self):
+        self.pages.setCurrentWidget(self.menu_page)
+
+    def show_chat(self):
+        self.pages.setCurrentWidget(self.chat_page)
+        if not self.ai_awake:
+            self.ai_awake = True
+            self.bubbles.append(("bip", "Je me réveille, ça prend quelques secondes… 🤖"))
+            self.render()
+            self.set_busy(True)
+            self.warm_up()
+        else:
+            self.input.setFocus()
+
+    def show_topics(self):
+        self.fiche_view.hide()
+        self.fiche_back.hide()
+        self.topics.show()
+
+    def show_fiche(self, name):
+        fiche = next(f for f in self.fiches if f["name"] == name)
+        self.topics.hide()
+        self.fiche_view.setHtml(f"<h2>{html.escape(name)}</h2>" + markdown_to_html(fiche["body"]))
+        self.fiche_view.show()
+        self.fiche_back.show()
+        self.speaker.stop()
+
+    # --- Ouvrir les logiciels ---
+    def say_on_menu(self, text):
+        self.menu_status.setText(text)
+        self.speaker.say(text)
+
+    def launch_app(self, desktop_name, message):
+        """Lance un logiciel comme son raccourci du bureau."""
+        try:
+            line = next(l for l in (APPS_DIR / f"{desktop_name}.desktop").read_text().splitlines()
+                        if l.startswith("Exec="))
+            program, *args = shlex.split(line[5:])
+        except (OSError, StopIteration, ValueError):
+            self.say_on_menu("Oups, je ne trouve pas ce logiciel 😕 Demande à papa.")
+            return
+        QProcess.startDetached(program, args)
+        self.say_on_menu(message)
+
+    def launch_ma_musique(self, *args):
+        QProcess.startDetached("python3", [str(MA_MUSIQUE), *args])
+        self.say_on_menu("J'ouvre ta bibliothèque 📚" if args else "J'ouvre Ma Musique 🎵")
+
+    # --- Mixxx ---
+    def update_mixxx_buttons(self):
+        self.mixxx_box.setVisible(mixeur.mixxx_running())
+
+    def mixxx_transition(self):
+        mixeur.send_midi(mixeur.CC_TRANSITION)
+        self.say_on_menu("C'est parti, j'enchaîne doucement vers la platine de droite ! 🎚")
+
+    def mixxx_stop(self):
+        mixeur.send_midi(mixeur.CC_STOP)
+        self.say_on_menu("J'arrête la musique ⏹")
+
+    def mix_ambiance(self, ambiance):
+        self.pages.setCurrentWidget(self.chat_page)
+        self.user_says(f"Un mix {ambiance['name']} !")
+        self.prepare_mix(ambiance["name"])
+
+    def mix_my_songs(self):
+        self.pages.setCurrentWidget(self.chat_page)
+        self.bip_says("Écris-moi tes deux chansons en bas, par exemple : "
+                      "« fais un mix avec Get Lucky et Californication » 😉")
+        self.input.setText("fais un mix avec ")
+        self.input.setFocus()
 
     # --- Affichage ---
     def render(self):
@@ -387,7 +619,8 @@ class Bip(QWidget):
 
     def open_mashup(self):
         mixeur.open_mashup_assistant()
-        self.bip_says("J'ouvre l'assistant mashup ! 🎤🎶 Choisis la chanson de chaque platine, "
+        say = self.bip_says if self.pages.currentWidget() is self.chat_page else self.say_on_menu
+        say("J'ouvre l'assistant mashup ! 🎤🎶 Choisis la chanson de chaque platine, "
                       "et si tu veux toute la chanson, juste la voix ou juste la musique. Je m'occupe du reste !")
 
     def prepare_mix(self, question):
