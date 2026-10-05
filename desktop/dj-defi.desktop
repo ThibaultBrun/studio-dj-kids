@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Défis DJ
+Comment=Jeu de rythme façon DJ Hero sur tes chansons
+Exec=python3 /home/djpiloupilou/.local/share/dj-defi/dj_defi.py
+Icon=input-gaming
+Terminal=false
+Categories=Game;AudioVideo;

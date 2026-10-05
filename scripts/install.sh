@@ -91,6 +91,7 @@ mkdir -p ~/.local/share/applications ~/.local/share/icons/ma-musique-web ~/.mixx
 ln -sfn '$REPO/ma-musique' ~/.local/share/ma-musique
 ln -sfn '$REPO/bip' ~/.local/share/bip
 ln -sfn /opt/mon-studio ~/.local/share/mon-studio
+ln -sfn '$REPO/dj-defi' ~/.local/share/dj-defi
 cp '$REPO'/icons/*.svg ~/.local/share/icons/ma-musique-web/
 ln -sf '$REPO/mixxx/Bip.midi.xml' '$REPO/mixxx/Bip-scripts.js' ~/.mixxx/controllers/
 ln -sf '$REPO/mixxx/Hercules-Inpulse-200-MK2-StudioDJKids.midi.xml' '$REPO/mixxx/Hercules-Inpulse-200-guide.js' ~/.mixxx/controllers/

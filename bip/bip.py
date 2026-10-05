@@ -213,6 +213,8 @@ class Bip(QWidget):
             ("🎵", "Télécharger\nune chanson", lambda: self.launch_ma_musique(), "tile"),
             ("📚", "Ma\nbibliothèque", lambda: self.launch_ma_musique("--bibliotheque"), "tile"),
             ("🎹", "Composer\nun morceau", lambda: self.launch_app("mon-studio", "J'ouvre Mon Studio 🎹"), "tile"),
+            ("🎮", "Défis\nDJ", lambda: self.launch_app("dj-defi", "J'ouvre les Défis DJ 🎮 À toi de jouer !"), "tile"),
+            ("🎛", "Ouvrir\nMixxx", lambda: self.launch_app("org.mixxx.Mixxx", "J'ouvre Mixxx 🎛"), "tile"),
             ("🥁", "Faire\ndes beats", lambda: self.launch_app("lmms-beats", "J'ouvre LMMS 🥁"), "tile"),
             ("❓", "Comment\non fait… ?", lambda: self.pages.setCurrentWidget(self.help_page), "tile"),
             ("💬", "Parler\nà Bip", self.show_chat, "tile"),
@@ -402,9 +404,11 @@ class Bip(QWidget):
     def launch_app(self, desktop_name, message):
         """Lance un logiciel comme son raccourci du bureau."""
         try:
-            line = next(l for l in (APPS_DIR / f"{desktop_name}.desktop").read_text().splitlines()
-                        if l.startswith("Exec="))
-            program, *args = shlex.split(line[5:])
+            desktop = next(p for p in (APPS_DIR / f"{desktop_name}.desktop",
+                                       Path("/usr/share/applications") / f"{desktop_name}.desktop") if p.exists())
+            line = next(l for l in desktop.read_text().splitlines() if l.startswith("Exec="))
+            # Les codes %f, %U… des raccourcis (fichiers à ouvrir) ne servent pas ici
+            program, *args = [a for a in shlex.split(line[5:]) if not a.startswith("%")]
         except (OSError, StopIteration, ValueError):
             self.say_on_menu("Oups, je ne trouve pas ce logiciel 😕 Demande à papa.")
             return

@@ -42,6 +42,16 @@
 - Bip peut préparer un mix tout seul : dis-lui « fais un mix avec » puis le nom de deux chansons ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
 - Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
+## Défis DJ | bureau | défis dj, defi dj, dj hero, jeu de rythme, jouer en rythme, notes qui tombent, combo, record, étoiles
+- Les Défis DJ sont un jeu de rythme, comme DJ Hero, sur tes propres chansons.
+- Choisis une chanson, puis ton niveau : ⭐ Facile, ⭐⭐ Moyen ou ⭐⭐⭐ Expert. Clique sur « Jouer ».
+- Des notes vertes, rouges et bleues arrivent sur la piste. Appuie sur ← (vert), ↓ (rouge) ou → (bleu) quand elles touchent les boutons en bas.
+- Les notes tombent sur les vrais coups de batterie de la chanson : écoute bien la musique !
+- « Parfait » rapporte plus que « Bien ». Enchaîne les notes sans en rater pour faire monter le combo : ×2, ×3, ×4.
+- À la fin, tu gagnes de 1 à 5 étoiles. Ton record est gardé pour chaque chanson et chaque niveau.
+- Échap met le jeu en pause.
+- La première fois, le jeu écoute la chanson pour préparer les notes : ça prend quelques secondes.
+
 ## Mashup | bureau | mashup, mash-up, mélanger deux chansons, voix d'une chanson, a cappella, acapella, instru, sans voix, séparer, pistes séparées
 - Un mashup, c'est la voix d'une chanson sur la musique d'une autre.
 - Pour en faire un : clique sur le gros bouton rose « Créer un mashup » (dans Bip, sur le bureau ou dans Ma Musique), ou dis-moi « fais un mashup ».
