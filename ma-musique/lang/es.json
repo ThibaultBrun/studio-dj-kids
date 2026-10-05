@@ -1,0 +1,20 @@
+{
+  "title": "🎵 Mi Música",
+  "app_name": "Mi Música",
+  "search": "🔍 Buscar",
+  "search_placeholder": "Escribe el nombre de una canción o un artista…",
+  "welcome": "¡Hola! Busca una canción para empezar 😀",
+  "my_music": "📂 Mi música",
+  "my_library": "📚 Mi biblioteca",
+  "searching": "🔎 Buscando «{query}»…",
+  "found": "Encontré {n} canciones 🎶",
+  "none": "😕 No encontré nada… ¡prueba a escribirlo distinto!",
+  "download": "⬇ Descargar",
+  "downloading": "⬇ Descargando… {percent:.0f} %",
+  "start_dl": "¡Vamos!… 0 %",
+  "retry": "🔁 Reintentando…",
+  "downloading_title": "⬇ Descargando «{title}»…",
+  "dl_failed": "😕 Uy, no funcionó. ¡Inténtalo de nuevo en un rato!",
+  "dl_done": "🎉 ¡«{name}» está en tu música!",
+  "confirm_close": "✂️ Se está separando una canción.\n¿Seguro que quieres cerrar?"
+}

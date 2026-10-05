@@ -1,0 +1,20 @@
+{
+  "title": "🎵 My Music",
+  "app_name": "My Music",
+  "search": "🔍 Search",
+  "search_placeholder": "Type a song or artist name…",
+  "welcome": "Hi! Search for a song to get started 😀",
+  "my_music": "📂 My music",
+  "my_library": "📚 My library",
+  "searching": "🔎 Searching for “{query}”…",
+  "found": "Found {n} songs 🎶",
+  "none": "😕 Nothing found… try spelling it differently!",
+  "download": "⬇ Download",
+  "downloading": "⬇ Downloading… {percent:.0f}%",
+  "start_dl": "Here we go… 0%",
+  "retry": "🔁 Trying again…",
+  "downloading_title": "⬇ Downloading “{title}”…",
+  "dl_failed": "😕 Oops, that didn't work. Try again in a bit!",
+  "dl_done": "🎉 “{name}” is in your music!",
+  "confirm_close": "✂️ A song is being split.\nDo you really want to close?"
+}

@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QLabel, QLineEdi
                              QProgressBar, QPushButton, QScrollArea, QTabWidget, QVBoxLayout, QWidget)
 
 from bibliotheque import Bibliotheque
+from i18n import t
 
 HOME = Path.home()
 BIN = HOME / ".local/bin"
@@ -158,7 +159,7 @@ def parse_progress(line):
             percent = min(100, float(done) / float(size) * 100)
         except (ValueError, ZeroDivisionError):
             return None
-        return percent * 0.8, f"⬇ Téléchargement… {percent:.0f} %"
+        return percent * 0.8, t("downloading", percent=percent)
     if line.startswith("[ExtractAudio]"):
         return 85, "🎛 Transformation en MP3…"
     if line.startswith("[EmbedThumbnail]"):
@@ -222,7 +223,7 @@ class ResultRow(QFrame):
         if entry["id"] in app.history:
             self.set_state("done", "✅ Déjà là")
         else:
-            self.set_state(None, "⬇ Télécharger")
+            self.set_state(None, t("download"))
 
     def set_progress(self, percent, text):
         """percent=None : barre animée (on ne connaît pas la durée)."""
@@ -245,7 +246,7 @@ class ResultRow(QFrame):
 class MaMusique(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("🎵 Ma Musique")
+        self.setWindowTitle(t("title"))
         self.resize(1100, 800)
         self.setStyleSheet(STYLE)
         self.net = QNetworkAccessManager(self)
@@ -263,9 +264,9 @@ class MaMusique(QWidget):
         root.setContentsMargins(0, 8, 0, 0)
         bar = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Tape le nom d'une chanson ou d'un artiste…")
+        self.search.setPlaceholderText(t("search_placeholder"))
         self.search.returnPressed.connect(self.do_search)
-        self.search_btn = QPushButton("🔍 Chercher")
+        self.search_btn = QPushButton(t("search"))
         self.search_btn.setMinimumHeight(56)
         self.search_btn.clicked.connect(self.do_search)
         bar.addWidget(self.search, 1)
@@ -281,9 +282,9 @@ class MaMusique(QWidget):
         root.addWidget(self.scroll, 1)
 
         bottom = QHBoxLayout()
-        self.status = QLabel("Salut ! Cherche une chanson pour commencer 😀")
+        self.status = QLabel(t("welcome"))
         self.status.setObjectName("status")
-        folder_btn = QPushButton("📂 Mes musiques")
+        folder_btn = QPushButton(t("my_music"))
         folder_btn.setObjectName("folder")
         folder_btn.setMinimumHeight(56)
         folder_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(MUSIC_DIR))))
@@ -298,8 +299,8 @@ class MaMusique(QWidget):
         outer.addLayout(bottom)
 
         self.library = Bibliotheque(self.status)
-        self.tabs.addTab(search_page, "🔍 Chercher")
-        self.tabs.addTab(self.library, "📚 Ma bibliothèque")
+        self.tabs.addTab(search_page, t("search"))
+        self.tabs.addTab(self.library, t("my_library"))
         self.tabs.currentChanged.connect(self.tab_changed)
 
         self.search.setFocus()
@@ -313,7 +314,7 @@ class MaMusique(QWidget):
 
     def closeEvent(self, event):
         if self.library.busy() and QMessageBox.question(
-                self, "Ma Musique", "✂️ Une chanson est en train d'être découpée.\nTu veux vraiment fermer ?") \
+                self, t("app_name"), t("confirm_close")) \
                 != QMessageBox.StandardButton.Yes:
             event.ignore()
             return
@@ -331,7 +332,7 @@ class MaMusique(QWidget):
         if not query or self.search_proc:
             return
         self.search_btn.setEnabled(False)
-        self.status.setText(f"🔎 Je cherche « {query} »…")
+        self.status.setText(t("searching", query=query))
         self.search_bar.show()
         self.search_proc = ytdlp_process(["--flat-playlist", "--dump-json", f"ytsearch{NB_RESULTS}:{query}"])
         self.search_proc.finished.connect(self.search_done)
@@ -363,8 +364,7 @@ class MaMusique(QWidget):
         for entry in entries:
             self.results_layout.insertWidget(self.results_layout.count() - 1, ResultRow(self, entry))
         self.scroll.verticalScrollBar().setValue(0)
-        self.status.setText(f"J'ai trouvé {len(entries)} chansons 🎶" if entries
-                            else "😕 Rien trouvé… essaie d'écrire autrement !")
+        self.status.setText(t("found", n=len(entries)) if entries else t("none"))
 
     def load_thumbnail(self, video_id, label):
         reply = self.net.get(QNetworkRequest(QUrl(f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg")))
@@ -397,8 +397,8 @@ class MaMusique(QWidget):
         job["tries"] += 1
         row = job["row"]
         row.set_state("busy", "⏳ Téléchargement…")
-        row.set_progress(0, "C'est parti… 0 %" if job["tries"] == 1 else "🔁 Nouvel essai…")
-        self.status.setText(f"⬇ Je télécharge « {row.entry.get('title')} »…")
+        row.set_progress(0, t("start_dl") if job["tries"] == 1 else t("retry"))
+        self.status.setText(t("downloading_title", title=row.entry.get('title')))
         proc = download_process(row.entry["id"])
         proc.readyReadStandardOutput.connect(self.download_output)
         proc.finished.connect(self.download_done)
@@ -425,12 +425,12 @@ class MaMusique(QWidget):
                 return
             row.set_state("error", "❌ Réessayer", enabled=True)
             row.progress.hide()
-            self.status.setText("😕 Oups, ça n'a pas marché. Réessaie dans un moment !")
+            self.status.setText(t("dl_failed"))
         else:
             self.history.add(video_id)
             row.set_state("done", "✅ Téléchargé")
             row.set_progress(100, "🎉 Fini !")
-            self.status.setText(f"🎉 « {final.stem} » est dans tes musiques !")
+            self.status.setText(t("dl_done", name=final.stem))
 
         self.current = None
         self.next_download()
