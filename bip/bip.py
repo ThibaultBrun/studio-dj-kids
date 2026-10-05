@@ -52,6 +52,8 @@ QPushButton#mic:disabled { background: #9e9e9e; }
 QPushButton#yes { background: #43a047; font-size: 18px; min-height: 48px; }
 QPushButton#no { background: #e53935; font-size: 18px; min-height: 48px; }
 QPushButton#voice { background: transparent; font-size: 26px; padding: 2px 6px; }
+QPushButton#mashup { background: #e91e63; font-size: 19px; min-height: 52px; }
+QPushButton#mashup:hover { background: #c2185b; }
 """
 
 
@@ -141,6 +143,11 @@ class Bip(QWidget):
         sub.setWordWrap(True)
         root.addLayout(top)
         root.addWidget(sub)
+        mashup = QPushButton("🎤 + 🎶 Créer un mashup")
+        mashup.setObjectName("mashup")
+        mashup.setToolTip("Mettre la voix d'une chanson sur la musique d'une autre : je m'occupe de tout !")
+        mashup.clicked.connect(self.open_mashup)
+        root.addWidget(mashup)
 
         self.view = QTextBrowser()
         self.view.setOpenLinks(False)
@@ -365,6 +372,11 @@ class Bip(QWidget):
             mixeur.send_midi(mixeur.CC_STOP)
             self.bip_says("J'arrête la musique ⏹")
             return True
+        if mixeur.is_mashup_request(question):
+            self.input.clear()
+            self.user_says(question)
+            self.open_mashup()
+            return True
         if mixeur.is_mix_request(question):
             self.input.clear()
             self.speaker.stop()
@@ -372,6 +384,11 @@ class Bip(QWidget):
             self.prepare_mix(question)
             return True
         return False
+
+    def open_mashup(self):
+        mixeur.open_mashup_assistant()
+        self.bip_says("J'ouvre l'assistant mashup ! 🎤🎶 Choisis la chanson de chaque platine, "
+                      "et si tu veux toute la chanson, juste la voix ou juste la musique. Je m'occupe du reste !")
 
     def prepare_mix(self, question):
         ambiance = mixeur.find_ambiance(question)

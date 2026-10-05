@@ -69,6 +69,19 @@ def is_mix_request(text):
     return bool(re.search(rf"\b({MIX_WORD})", q) and (find_ambiance(text) or re.search(r"\b(avec|et)\b", q)))
 
 
+# « mashup », et ce que la reconnaissance vocale en fait souvent
+MASHUP_REQUEST = re.compile(r"\bma[st]?c?h[ -]?up+s?\b|\bmash ?ups?\b|\bmatch ?ups?\b|\bmeshup")
+
+
+def is_mashup_request(text):
+    return bool(MASHUP_REQUEST.search(normalize(text)))
+
+
+def open_mashup_assistant():
+    """Ouvre l'assistant « Créer un mashup » de Ma Musique."""
+    QProcess.startDetached("python3", [str(HOME / ".local/share/ma-musique/ma_musique.py"), "--mashup"])
+
+
 def is_transition_request(text):
     return bool(TRANSITION_REQUEST.search(normalize(text)))
 

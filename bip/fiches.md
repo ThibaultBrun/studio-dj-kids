@@ -42,6 +42,15 @@
 - Bip peut préparer un mix tout seul : dis-lui « fais un mix avec » puis le nom de deux chansons ou « fais-moi un mix hip-hop pour scratcher ». Il télécharge les chansons, ouvre Mixxx et cale les platines.
 - Pendant le mix, dis à Bip « enchaîne » pour qu'il passe tout doucement à la platine de droite, ou « arrête la musique ».
 
+## Mashup | bureau | mashup, mash-up, mélanger deux chansons, voix d'une chanson, a cappella, acapella, instru, sans voix, séparer, pistes séparées
+- Un mashup, c'est la voix d'une chanson sur la musique d'une autre.
+- Pour en faire un : clique sur le gros bouton rose « Créer un mashup » (dans Bip, sur le bureau ou dans Ma Musique), ou dis-moi « fais un mashup ».
+- Pour chaque platine : choisis une chanson dans la liste (ou cherche-la sur Internet), puis « Chanson entière », « Juste la voix » ou « Juste la musique ».
+- Ensuite clique sur « Lancer le mashup » : l'assistant télécharge, sépare la voix et la musique, écoute le rythme, puis ouvre Mixxx avec tout calé.
+- Séparer une chanson prend environ 5 minutes : la barre de progression montre où ça en est.
+- Le smiley dit si ça ira bien ensemble : 😀 super, 😐 ça peut marcher, 😬 ça risque de sonner bizarre.
+- Si Mixxx est déjà ouvert, l'assistant propose de le fermer pour y mettre le mashup.
+
 ## Mon Studio | bureau | mon studio, studio, swing, humain, accent, annuler, retour en arriere, clavier, touche, touches, enregistrer, jouer en direct, defi, défi, defis, défis, exercice, lecon, leçon, composer, morceau, ligne de temps, motif, motifs, basse, melodie, mélodie, exporter, mes creations, mes créations
 - Mon Studio sert à composer un morceau avec 4 lignes : Batterie, Basse, Accords et Mélodie.
 - En haut, la ligne de temps : 16 mesures. Chaque bloc de couleur est un motif (A, B, C…) qui joue à cet endroit.
