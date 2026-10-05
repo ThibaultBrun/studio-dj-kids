@@ -29,6 +29,15 @@ systemctl daemon-reload
 mount /data
 chown "$USER_NAME:$USER_NAME" /data
 
+echo ">> Dossiers de l'enfant sur le disque dur (musiques, projets LMMS, documents…)"
+USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6)
+for d in Musique Images Vidéos Téléchargements Documents lmms; do
+    [ -L "$USER_HOME/$d" ] && continue
+    if [ -d "$USER_HOME/$d" ]; then mv "$USER_HOME/$d" "/data/$d"; else mkdir -p "/data/$d"; fi
+    chown "$USER_NAME:$USER_NAME" "/data/$d"
+    sudo -u "$USER_NAME" ln -s "/data/$d" "$USER_HOME/$d"
+done
+
 echo ">> Terminé"
 lsblk -f "$DISK"
 df -h /data
