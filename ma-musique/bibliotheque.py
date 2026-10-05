@@ -1,19 +1,24 @@
 """Ma bibliothèque : écouter ses musiques et les séparer en pistes (voix, batterie, basse…)."""
+import json
 from pathlib import Path
 
 from mutagen import File as AudioFile
 from mutagen import MutagenError
-from PyQt6.QtCore import QMimeData, QProcess, QProcessEnvironment, Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import QMimeData, QProcess, QProcessEnvironment, Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QDrag, QPixmap
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
                              QProgressBar, QPushButton, QScrollArea, QSlider, QStyle, QVBoxLayout, QWidget)
+
+import mixxx_db
 
 HOME = Path.home()
 MUSIC_DIR = HOME / "Musique"
 STEMS_DIR = MUSIC_DIR / "Pistes séparées"
 SEPARATOR_PY = HOME / ".local/share/separateur/venv/bin/python"
 SEPARER = Path(__file__).resolve().parent / "separer.py"
+ANALYSER = Path(__file__).resolve().parent / "analyser.py"
+ANALYSES_FILE = HOME / ".local/share/studio-dj-kids/analyses.json"  # tempo et tonalité trouvés par Ma Musique
 AUDIO_EXT = {".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus"}
 STEM_ICONS = {"Voix": "🎤", "Sans voix": "🎶", "Batterie": "🥁", "Basse": "🎸",
               "Guitare": "🪕", "Piano": "🎹", "Autres": "✨"}
@@ -56,6 +61,19 @@ def read_song(path):
     except (MutagenError, AttributeError, OSError):
         pass
     return artist, title, duration, cover
+
+
+def load_analyses():
+    try:
+        return json.loads(ANALYSES_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def music_text(info):
+    if not info or not info.get("bpm"):
+        return ""
+    return f"🥁 {info['bpm']:.0f} BPM" + (f"    🎼 {info['key']}" if info.get("key") else "")
 
 
 def stems_of(song):
@@ -216,6 +234,8 @@ class SongRow(QFrame):
             info += f"    📁 {path.parent.name}"
         texts.addWidget(title_label)
         texts.addWidget(QLabel(info))
+        self.music_label = QLabel()
+        texts.addWidget(self.music_label)
         texts.addStretch()
         self.progress = QProgressBar()
         self.progress.hide()
@@ -238,6 +258,9 @@ class SongRow(QFrame):
         self.stems_box.hide()
         outer.addWidget(self.stems_box)
         self.refresh_stems()
+
+    def set_music(self, info, listening=False):
+        self.music_label.setText(music_text(info) or ("🥁 J'écoute le rythme…" if listening else ""))
 
     # --- Pistes séparées ---
     def refresh_stems(self):
@@ -295,14 +318,20 @@ class Bibliotheque(QWidget):
         super().__init__()
         self.status = status  # la barre d'état de la fenêtre
         self.separator_ok = SEPARATOR_PY.exists()
+        self.analyses = load_analyses()
         self.rows = {}
-        self.queue = []
-        self.current = None
-        self.playing = None  # (bouton, texte d'origine)
+        self.queue = []        # séparations demandées (prioritaires)
+        self.to_analyse = []   # chansons dont on cherche le tempo et la tonalité
+        self.current = None    # tâche en cours : séparation ou analyse
+        self.playing = None    # (bouton, texte d'origine)
         self.audio = QAudioOutput(self)
         self.player = QMediaPlayer(self)
         self.player.setAudioOutput(self.audio)
         self.player.playbackStateChanged.connect(self.playback_changed)
+        # Dès que Mixxx est fermé, on donne aux pistes séparées la grille de leur chanson
+        self.mixxx_timer = QTimer(self)
+        self.mixxx_timer.timeout.connect(self.sync_mixxx)
+        self.mixxx_timer.start(20000)
 
         root = QVBoxLayout(self)
         bar = QHBoxLayout()
@@ -310,6 +339,12 @@ class Bibliotheque(QWidget):
         self.filter.setPlaceholderText("🔎 Retrouver une chanson…")
         self.filter.textChanged.connect(self.apply_filter)
         bar.addWidget(self.filter, 1)
+        mashup = QPushButton("🎤 + 🎶 Faire un mashup")
+        mashup.setObjectName("mashup")
+        mashup.setMinimumHeight(56)
+        mashup.setToolTip("Mettre la voix d'une chanson sur la musique d'une autre")
+        mashup.clicked.connect(self.open_mashup)
+        bar.addWidget(mashup)
         root.addLayout(bar)
 
         self.scroll = QScrollArea()
@@ -332,33 +367,67 @@ class Bibliotheque(QWidget):
     # --- Liste des chansons ---
     def refresh(self):
         songs = list_songs()
-        if list(self.rows) == songs:
-            for row in self.rows.values():
-                row.refresh_stems()
-            return
-        while self.list_layout.count() > 1:
-            widget = self.list_layout.takeAt(0).widget()
-            if widget:
-                widget.setParent(None)
-        old = self.rows
-        self.rows = {}
-        for path in songs:
-            row = old.pop(path, None) or SongRow(self, path)
+        if list(self.rows) != songs:
+            while self.list_layout.count() > 1:
+                widget = self.list_layout.takeAt(0).widget()
+                if widget:
+                    widget.setParent(None)
+            old = self.rows
+            self.rows = {}
+            for path in songs:
+                self.rows[path] = old.pop(path, None) or SongRow(self, path)
+                self.list_layout.insertWidget(self.list_layout.count() - 1, self.rows[path])
+            for row in old.values():
+                if not self.busy_row(row):
+                    row.deleteLater()
+            self.apply_filter()
+        for path, row in self.rows.items():
             row.refresh_stems()
-            self.rows[path] = row
-            self.list_layout.insertWidget(self.list_layout.count() - 1, row)
-        for row in old.values():
-            if not self.busy_row(row):
-                row.deleteLater()
-        self.apply_filter()
+            info = self.song_info(path)
+            row.set_music(info, listening=self.current is not None and self.current.get("path") == path)
+            if not info and self.separator_ok and path not in self.to_analyse:
+                self.to_analyse.append(path)
         if not self.current:
             self.status.setText(f"📚 Tu as {len(songs)} chansons" if songs
                                 else "📚 Pas encore de chansons : va dans « Chercher » pour en télécharger !")
+        self.sync_mixxx()
+        self.next_job()
 
     def apply_filter(self):
         words = self.filter.text().lower().split()
         for row in self.rows.values():
             row.setVisible(all(w in row.search_text for w in words))
+
+    def song_info(self, path):
+        """Tempo, premier temps et tonalité : ceux de Mixxx s'il a analysé la chanson, sinon les nôtres."""
+        info = mixxx_db.track_analysis(path)
+        if info:
+            return info
+        entry = self.analyses.get(str(path))
+        try:
+            if entry and entry.get("mtime") == int(path.stat().st_mtime):
+                return entry
+        except OSError:
+            pass
+        return None
+
+    # --- Mixxx ---
+    def sync_mixxx(self):
+        if mixxx_db.mixxx_running():
+            return
+        for path, row in self.rows.items():
+            stems = list(row.stems.values())
+            if not stems or mixxx_db.stems_have_grid(path, stems):
+                continue
+            entry = self.song_info(path)
+            if not mixxx_db.give_grid_to_stems(path, stems, entry) and not entry and path not in self.to_analyse:
+                self.to_analyse.insert(0, path)
+        self.next_job()
+
+    def open_mashup(self):
+        from mashup import MashupDialog  # chargé à la demande (il réutilise le pilotage de Mixxx de Bip)
+        self.refresh()
+        MashupDialog(self).exec()
 
     # --- Écouter ---
     def toggle_play(self, path, button, text):
@@ -383,25 +452,73 @@ class Bibliotheque(QWidget):
     def stop_playing(self):
         self.player.stop()
 
-    # --- Séparation (une chanson à la fois) ---
+    # --- Tâches de fond, une à la fois : d'abord les séparations, puis les analyses ---
     def busy_row(self, row):
-        return (self.current and self.current["row"] is row) or any(j["row"] is row for j in self.queue)
+        return (self.current and self.current.get("row") is row) or any(j["row"] is row for j in self.queue)
 
     def enqueue(self, row):
         row.set_state("busy", "⏳ En attente…")
         self.queue.append({"row": row, "tries": 0})
-        self.next_split()
+        self.next_job()
 
-    def next_split(self):
-        if self.current or not self.queue:
+    def next_job(self):
+        if self.current:
             return
-        self.current = self.queue.pop(0)
-        self.start_split()
+        if self.queue:
+            self.current = self.queue.pop(0)
+            self.start_split()
+            return
+        while self.to_analyse:
+            path = self.to_analyse.pop(0)
+            if path in self.rows and not self.song_info(path):
+                self.start_analysis(path)
+                return
 
+    def run(self, args, on_output, on_done, use_gpu=True):
+        proc = QProcess(self)
+        if not use_gpu:  # si la carte graphique a calé, on réessaie avec le processeur seul
+            env = QProcessEnvironment.systemEnvironment()
+            env.insert("CUDA_VISIBLE_DEVICES", "")
+            proc.setProcessEnvironment(env)
+        proc.setProgram(str(SEPARATOR_PY))
+        proc.setArguments([str(a) for a in args])
+        proc.readyReadStandardOutput.connect(on_output)
+        proc.finished.connect(on_done)
+        proc.start()
+        return proc
+
+    # Analyse : tempo et tonalité
+    def start_analysis(self, path):
+        self.current = {"kind": "analyse", "path": path, "out": b""}
+        self.rows[path].set_music(None, listening=True)
+        self.current["proc"] = self.run([ANALYSER, path], self.analysis_output, self.analysis_done)
+
+    def analysis_output(self):
+        self.current["out"] += bytes(self.current["proc"].readAllStandardOutput())
+
+    def analysis_done(self):
+        job, self.current = self.current, None
+        path = job["path"]
+        try:
+            info = json.loads(job["out"].decode().strip().splitlines()[-1])
+            info["mtime"] = int(path.stat().st_mtime)
+        except (ValueError, IndexError, OSError):
+            info = None
+        if info and info.get("bpm"):
+            self.analyses[str(path)] = info
+            ANALYSES_FILE.parent.mkdir(parents=True, exist_ok=True)
+            ANALYSES_FILE.write_text(json.dumps(self.analyses, indent=1, ensure_ascii=False))
+        if path in self.rows:
+            self.rows[path].set_music(self.song_info(path))
+        self.sync_mixxx()
+        self.next_job()
+
+    # Séparation
     def start_split(self):
         job = self.current
         job["tries"] += 1
         job["step"] = "modele"
+        job["ok"] = False
         row = job["row"]
         row.set_state("busy", "✂️ Séparation…")
         row.set_progress(None, "Je prépare les ciseaux… ✂️" if job["tries"] == 1 else "🔁 Nouvel essai, plus lent…")
@@ -409,18 +526,8 @@ class Bibliotheque(QWidget):
         self.status.setText(f"✂️ Je découpe « {row.path.stem} »… ça prend environ {minutes} min, "
                             "tu peux faire autre chose en attendant !")
         STEMS_DIR.mkdir(parents=True, exist_ok=True)
-        proc = QProcess(self)
-        if job["tries"] > 1:  # si la carte graphique a calé, on réessaie avec le processeur seul
-            env = QProcessEnvironment.systemEnvironment()
-            env.insert("CUDA_VISIBLE_DEVICES", "")
-            proc.setProcessEnvironment(env)
-        proc.setProgram(str(SEPARATOR_PY))
-        proc.setArguments([str(SEPARER), str(row.path), str(STEMS_DIR / row.path.stem)])
-        proc.readyReadStandardOutput.connect(self.split_output)
-        proc.finished.connect(self.split_done)
-        job["proc"] = proc
-        job["ok"] = False
-        proc.start()
+        job["proc"] = self.run([SEPARER, row.path, STEMS_DIR / row.path.stem], self.split_output, self.split_done,
+                               use_gpu=job["tries"] == 1)
 
     def split_output(self):
         job = self.current
@@ -456,12 +563,14 @@ class Bibliotheque(QWidget):
             row.set_progress(100, "🎉 Fini !")
             row.stems_box.show()
             self.status.setText(f"🎉 « {row.path.stem} » est découpée ! Écoute les pistes ou glisse-les dans Mixxx.")
+            if not self.song_info(row.path) and row.path not in self.to_analyse:
+                self.to_analyse.insert(0, row.path)
         else:
             row.progress.hide()
             row.set_state("error", "❌ Réessayer", enabled=True)
             self.status.setText("😕 Oups, la séparation n'a pas marché. Réessaie, ou demande à papa.")
-        self.next_split()
+        self.sync_mixxx()
+        self.next_job()
 
     def busy(self):
-        return bool(self.current or self.queue)
-
+        return bool(self.queue) or bool(self.current and self.current.get("row"))

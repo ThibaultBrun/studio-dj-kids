@@ -43,6 +43,8 @@ QPushButton#done { background: #43a047; }
 QPushButton#error { background: #e53935; }
 QPushButton#folder { background: #ff9800; }
 QPushButton#play { background: #8e24aa; }
+QPushButton#mashup { background: #e91e63; }
+QPushButton#mashup:hover { background: #c2185b; }
 QPushButton#play:hover { background: #6a1b9a; }
 QPushButton#stem { background: #26a69a; font-size: 17px; }
 QPushButton#stem:hover { background: #00897b; }

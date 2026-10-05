@@ -5,12 +5,14 @@ var Bip = {};
 
 Bip.MODE_MIX = 1;
 Bip.MODE_SCRATCH = 2;
+Bip.MODE_MASHUP = 3;
 Bip.WAIT_STEP_MS = 500;
 Bip.WAIT_MAX_MS = 45000;      // temps max pour charger et analyser les deux morceaux
 Bip.TRANSITION_MS = 8000;     // durée du fondu enchaîné automatique
 Bip.TRANSITION_STEPS = 40;
 
 Bip.busy = false;
+Bip.mashupShift = 0;   // demi-tons à ajouter à la voix d'un mashup
 
 Bip.init = function() {
     Bip.busy = false;
@@ -47,6 +49,8 @@ Bip.prepare = function(channel, control, value) {
         }
         if (value === Bip.MODE_SCRATCH) {
             Bip.setupScratch();
+        } else if (value === Bip.MODE_MASHUP) {
+            Bip.setupMashup(loaded);
         } else {
             Bip.setupMix(loaded);
         }
@@ -68,6 +72,33 @@ Bip.setupMix = function(loaded) {
     engine.setValue("[Master]", "crossfader", -1);
     engine.setValue("[Channel1]", "play", 1);
     Bip.say(loaded ? "PRET" : "PRET_SANS_SYNC");
+};
+
+Bip.setShift = function(channel, control, value) {
+    Bip.mashupShift = value - 64;
+};
+
+Bip.setupMashup = function(loaded) {
+    // Platine 1 = la voix, platine 2 = la musique. La voix suit le tempo de la musique sans changer
+    // de hauteur (keylock), décalée du nombre de demi-tons qui accorde les deux tonalités.
+    ["[Channel1]", "[Channel2]"].forEach(function(group) {
+        engine.setValue(group, "quantize", 1);
+        engine.setValue(group, "keylock", 1);
+        engine.setValue(group, "playposition", 0);
+    });
+    engine.setValue("[Channel1]", "pitch_adjust", Bip.mashupShift);
+    engine.setValue("[Master]", "crossfader", 0);
+    if (loaded) {
+        engine.setValue("[Channel2]", "sync_leader", 1);
+        engine.setValue("[Channel2]", "sync_enabled", 1);
+        engine.setValue("[Channel1]", "sync_enabled", 1);
+    }
+    engine.setValue("[Channel2]", "play", 1);
+    // La voix part un instant après, pile sur un temps de la musique (quantize)
+    engine.beginTimer(300, function() {
+        engine.setValue("[Channel1]", "play", 1);
+        Bip.say(loaded ? "PRET_MASHUP" : "PRET_SANS_SYNC");
+    }, true);
 };
 
 Bip.setupScratch = function() {

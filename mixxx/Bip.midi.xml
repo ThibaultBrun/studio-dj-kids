@@ -10,7 +10,7 @@
             <file filename="Bip-scripts.js" functionprefix="Bip"/>
         </scriptfiles>
         <controls>
-            <!-- CC 0x70 : préparer (valeur 1 = mix, 2 = scratch) -->
+            <!-- CC 0x70 : préparer (valeur 1 = mix, 2 = scratch, 3 = mashup) -->
             <control>
                 <group>[Master]</group>
                 <key>Bip.prepare</key>
@@ -24,6 +24,14 @@
                 <key>Bip.transition</key>
                 <status>0xB0</status>
                 <midino>0x71</midino>
+                <options><script-binding/></options>
+            </control>
+            <!-- CC 0x73 : demi-tons de la voix du mashup (64 = aucun) -->
+            <control>
+                <group>[Master]</group>
+                <key>Bip.setShift</key>
+                <status>0xB0</status>
+                <midino>0x73</midino>
                 <options><script-binding/></options>
             </control>
             <!-- CC 0x72 : tout arrêter -->

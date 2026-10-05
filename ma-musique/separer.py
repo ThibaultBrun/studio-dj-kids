@@ -37,17 +37,23 @@ def counting(iterable, *args, **kwargs):
     say("PROGRESS", len(items), len(items))
 
 
-def read_tags(song):
-    out = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_format", str(song)],
-                         capture_output=True, text=True).stdout
+def probe(song):
+    """(tags, fréquence d'échantillonnage) de la chanson."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams",
+                          "-select_streams", "a:0", str(song)], capture_output=True, text=True).stdout
     try:
-        return {k.lower(): v for k, v in json.loads(out)["format"].get("tags", {}).items()}
-    except (ValueError, KeyError):
-        return {}
+        info = json.loads(out)
+        tags = {k.lower(): v for k, v in info["format"].get("tags", {}).items()}
+        return tags, int(info["streams"][0]["sample_rate"])
+    except (ValueError, KeyError, IndexError):
+        return {}, 44100
 
 
-def to_mp3(wavs, song, title, dest):
-    """Encode une ou plusieurs pistes (mélangées) en MP3, avec les tags et la pochette de la chanson."""
+def to_mp3(wavs, song, title, rate, dest):
+    """Encode une ou plusieurs pistes (mélangées) en MP3, avec les tags et la pochette de la chanson.
+
+    Même fréquence que l'original : la grille de tempo de Mixxx (en échantillons) reste alors identique.
+    """
     cmd = ["ffmpeg", "-v", "error", "-y"]
     for wav in wavs:
         cmd += ["-i", str(wav)]
@@ -59,14 +65,14 @@ def to_mp3(wavs, song, title, dest):
     else:
         cmd += ["-map", "0:a"]
     cmd += ["-map", f"{n}:v?", "-c:v", "copy", "-map_metadata", str(n),
-            "-c:a", "libmp3lame", "-b:a", "320k", "-id3v2_version", "3",
+            "-c:a", "libmp3lame", "-b:a", "320k", "-ar", str(rate), "-id3v2_version", "3",
             "-metadata", f"title={title}", str(dest)]
     subprocess.run(cmd, check=True)
 
 
 def main():
     song, dest = Path(sys.argv[1]), Path(sys.argv[2])
-    tags = read_tags(song)
+    tags, rate = probe(song)
     title = tags.get("title") or song.stem
     mdxc.tqdm = counting
 
@@ -93,7 +99,7 @@ def main():
         jobs.insert(1, ([w for s, w in wavs.items() if s != "vocals"], INSTRU))
         for i, (sources, label) in enumerate(jobs):
             say("PROGRESS", i, len(jobs))
-            to_mp3(sources, song, f"{title} ({label})", out / f"{name} ({label}).mp3")
+            to_mp3(sources, song, f"{title} ({label})", rate, out / f"{name} ({label}).mp3")
         if dest.exists():
             shutil.rmtree(dest)
         shutil.move(out, dest)

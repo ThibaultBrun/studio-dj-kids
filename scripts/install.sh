@@ -63,7 +63,7 @@ cd $W
 [ -f models/ggml-small.bin ] || sh ./models/download-ggml-model.sh small
 '
 
-echo ">> Séparateur de pistes pour Ma Musique (BS-RoFormer SW, ~7 Go)"
+echo ">> Séparateur de pistes et analyse du tempo pour Ma Musique (BS-RoFormer SW, ~7 Go)"
 as_child '
 set -e
 cd ~/.local/bin
@@ -75,6 +75,8 @@ if ! $S/venv/bin/python -c "from audio_separator.separator import Separator" 2>/
     VIRTUAL_ENV=$S/venv ./uv pip install -q torch torchaudio --index-url https://download.pytorch.org/whl/cu126
     VIRTUAL_ENV=$S/venv ./uv pip install -q "audio-separator[cpu]" librosa audioread
 fi
+# Tempo (beat_this) et tonalité (essentia) des chansons, pour les mashups
+$S/venv/bin/python -c "import beat_this, essentia" 2>/dev/null || VIRTUAL_ENV=$S/venv ./uv pip install -q beat-this essentia
 $S/venv/bin/python -c "
 from pathlib import Path
 from audio_separator.separator import Separator
