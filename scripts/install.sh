@@ -121,13 +121,15 @@ as_child '
 set -e
 # Lancer les raccourcis au lieu de les ouvrir dans un éditeur (réglage Ubuntu Studio)
 kwriteconfig6 --file kiorc --group "Executable scripts" --key behaviourOnLaunch execute
-# Bip s’ouvre sur le côté droit de l’écran, au-dessus des autres fenêtres
+# Bip s’ouvre sur le côté droit de l’écran (sans rester au-dessus : il passe derrière quand on clique ailleurs)
 kwriteconfig6 --file kwinrulesrc --group General --key count 1
 kwriteconfig6 --file kwinrulesrc --group General --key rules bip-sidebar
 for kv in "Description=Bip sur le côté droit" wmclass=bip wmclassmatch=1 wmclasscomplete=false \
-          position=1480,0 positionrule=3 size=440,1030 sizerule=3 above=true aboverule=3; do
+          position=1480,0 positionrule=3 size=440,1030 sizerule=3; do
     kwriteconfig6 --file kwinrulesrc --group bip-sidebar --key "${kv%%=*}" "${kv#*=}"
 done
+kwriteconfig6 --file kwinrulesrc --group bip-sidebar --key above --delete
+kwriteconfig6 --file kwinrulesrc --group bip-sidebar --key aboverule --delete
 '
 
 echo ">> Terminé. Ouvrez Mixxx une première fois depuis le compte $CHILD pour créer sa configuration."
