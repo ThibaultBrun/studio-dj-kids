@@ -46,11 +46,12 @@ QPushButton#play { background: #8e24aa; }
 QPushButton#play:hover { background: #6a1b9a; }
 QPushButton#stem { background: #26a69a; font-size: 17px; }
 QPushButton#stem:hover { background: #00897b; }
-QFrame#stems { background: #eef8f7; border-radius: 12px; }
-QLabel#help { font-size: 15px; color: #555; }
+QFrame#stems { background: rgba(38, 166, 154, 0.18); border-radius: 12px; }
+QLabel#help { font-size: 15px; font-style: italic; }
 QTabWidget::pane { border: none; }
 QTabBar::tab { font-size: 20px; font-weight: bold; padding: 12px 34px; margin-right: 6px;
-               border-top-left-radius: 14px; border-top-right-radius: 14px; background: #dde7f3; }
+               border-top-left-radius: 14px; border-top-right-radius: 14px; background: #2c4f78; color: white; }
+QTabBar::tab:hover { background: #3a6597; }
 QTabBar::tab:selected { background: #4a90e2; color: white; }
 QFrame#row { border: 2px solid #ddd; border-radius: 14px; }
 QLabel#title { font-size: 18px; font-weight: bold; }
