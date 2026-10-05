@@ -93,6 +93,7 @@ ln -sfn '$REPO/bip' ~/.local/share/bip
 ln -sfn /opt/mon-studio ~/.local/share/mon-studio
 cp '$REPO'/icons/*.svg ~/.local/share/icons/ma-musique-web/
 ln -sf '$REPO/mixxx/Bip.midi.xml' '$REPO/mixxx/Bip-scripts.js' ~/.mixxx/controllers/
+ln -sf '$REPO/mixxx/Hercules-Inpulse-200-MK2-StudioDJKids.midi.xml' '$REPO/mixxx/Hercules-Inpulse-200-guide.js' ~/.mixxx/controllers/
 "
 DESKTOP=$(sudo -u "$CHILD" -H xdg-user-dir DESKTOP)
 for f in "$REPO"/desktop/*.desktop; do
