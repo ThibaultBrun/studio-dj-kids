@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Génère les one-shots des pads (synthétisés = libres de droits) dans dj-defi/sounds/.
+"""Génère le son de scratch des zones (synthétisés = libres de droits) dans dj-defi/sounds/.
 Lancer une fois : python3 make_sounds.py
 """
 import math
@@ -31,19 +31,6 @@ def env(i, n, attack=0.005, release=0.25):
     return max(0.0, a) * max(0.0, r)
 
 
-def airhorn(dur=0.9):
-    n = int(SR * dur)
-    out = []
-    for i in range(n):
-        t = i / SR
-        vib = 1 + 0.015 * math.sin(2 * math.pi * 6 * t)
-        s = 0.0
-        for f, a in ((233, 1.0), (233 * 1.5, 0.6), (233 * 2, 0.4), (233 * 2.5, 0.25)):
-            s += a * math.sin(2 * math.pi * f * vib * t)
-        out.append(s * env(i, n, 0.01, 0.2))
-    return out
-
-
 def scratch(dur=0.45):
     import random
     random.seed(1)
@@ -59,29 +46,6 @@ def scratch(dur=0.45):
     return out
 
 
-def zap(dur=0.4):
-    n = int(SR * dur)
-    out = []
-    for i in range(n):
-        t = i / SR
-        f = 1800 * math.exp(-6 * t) + 120   # descente « piou »
-        out.append(math.sin(2 * math.pi * f * t) * env(i, n, 0.003, 0.25))
-    return out
-
-
-def boom(dur=0.6):
-    n = int(SR * dur)
-    out = []
-    for i in range(n):
-        t = i / SR
-        f = 120 * math.exp(-8 * t) + 45     # grosse caisse sub
-        out.append(math.sin(2 * math.pi * f * t) * env(i, n, 0.002, 0.4))
-    return out
-
-
 if __name__ == "__main__":
-    save("airhorn.wav", airhorn())
     save("scratch.wav", scratch())
-    save("zap.wav", zap())
-    save("boom.wav", boom())
     print("OK ->", OUT)

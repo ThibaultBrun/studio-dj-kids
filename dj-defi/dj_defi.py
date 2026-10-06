@@ -33,11 +33,6 @@ LANE_COLORS = [QColor("#2ecc40"), QColor("#ff4136"), QColor("#2f8bff")]  # vert,
 LANE_KEYS = [{Qt.Key.Key_Left, Qt.Key.Key_1, Qt.Key.Key_D}, {Qt.Key.Key_Down, Qt.Key.Key_2, Qt.Key.Key_F},
              {Qt.Key.Key_Right, Qt.Key.Key_3, Qt.Key.Key_J}]
 LANE_HINTS = ["←", "↓", "→"]
-# Pads « sons à envoyer » (bonus, jamais de punition) : touches A S E R
-PAD_KEYS = [Qt.Key.Key_A, Qt.Key.Key_S, Qt.Key.Key_E, Qt.Key.Key_R]
-PAD_NAMES = ["airhorn", "scratch", "zap", "boom"]
-PAD_LABELS = ["A", "S", "E", "R"]
-PAD_COLORS = [QColor("#ffb300"), QColor("#8e44ff"), QColor("#00d0c0"), QColor("#ff4fd8")]
 # Zones avancées (façon DJ Hero). Touches dédiées pour ne pas gêner les lanes ← ↓ → :
 SCRATCH_KEYS = (Qt.Key.Key_G, Qt.Key.Key_H)  # alterner pour scratcher
 FADER_KEY = Qt.Key.Key_B                      # à tenir pendant la zone fader
@@ -151,32 +146,6 @@ class Highway(QWidget):
             painter.setBrush(LANE_COLORS[note["lane"]])
             painter.setPen(QPen(QColor("white"), 3))
             painter.drawEllipse(QPointF(x, y), 40 * size, 20 * size)
-        # Pads (sons à envoyer) : rangée de 4 en bas + marqueur qui tombe quand un cue approche
-        pads = getattr(game, "pads", [])
-        if pads:
-            pad_w = w * 0.6 / 4
-            x0, pad_y, top = w * 0.2, h - 48, self.y_of(1)
-            for i in range(4):
-                cx = x0 + pad_w * (i + 0.5)
-                upcoming = [p for p in pads if not p["done"] and p["pad"] == i and -0.1 <= p["t"] - now <= window]
-                glow = 0.22
-                if upcoming:
-                    frac = max(0.0, min(1.0, 1 - min(p["t"] - now for p in upcoming) / window))
-                    glow = 0.22 + 0.78 * frac
-                    painter.setBrush(PAD_COLORS[i])
-                    painter.setPen(QPen(QColor("white"), 2))
-                    painter.drawEllipse(QPointF(cx, top + frac * (pad_y - top)), 15, 15)
-                pressed = time.monotonic() - game.pad_pressed_at[i] < 0.12
-                fill = QColor("white") if pressed else QColor(PAD_COLORS[i])
-                if not pressed:
-                    fill.setAlphaF(glow)
-                painter.setBrush(fill)
-                painter.setPen(QPen(PAD_COLORS[i], 3))
-                painter.drawRoundedRect(QRectF(cx - pad_w * 0.4, pad_y - 18, pad_w * 0.8, 36), 10, 10)
-                painter.setPen(QColor("white"))
-                painter.setFont(QFont(self.font().family(), 16, QFont.Weight.Bold))
-                painter.drawText(QRectF(cx - pad_w * 0.4, pad_y - 18, pad_w * 0.8, 36),
-                                 Qt.AlignmentFlag.AlignCenter, PAD_LABELS[i])
         # Bannière de zone (scratch / fader / cut) : active, ou qui arrive dans ~1.5 s
         banner = None
         for zone in getattr(game, "scratch_zones", []):
@@ -225,15 +194,6 @@ class Game(QWidget):
         self.pressed_at = [0.0, 0.0, 0.0]
         self.flash = None
         self.countdown = ""
-        # Pads (sons à envoyer) : état + chargement des one-shots
-        self.pads = []
-        self.pad_pressed_at = [0.0, 0.0, 0.0, 0.0]
-        self.pad_sounds = []
-        for name in PAD_NAMES:
-            effect = QSoundEffect(self)
-            effect.setSource(QUrl.fromLocalFile(str(SOUNDS_DIR / f"{name}.wav")))
-            effect.setVolume(0.9)
-            self.pad_sounds.append(effect)
         # Zones avancées (scratch / fader / cut)
         self.scratch_zones, self.fader_zones, self.cut_zones = [], [], []
         self.fader_held = False
@@ -257,14 +217,13 @@ class Game(QWidget):
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         root.addWidget(self.progress)
-        hint = QLabel("← ↓ → notes • A S E R pads • G↔H scratch • Espace cut • B fader • Échap : pause")
+        hint = QLabel("← ↓ → notes • G↔H scratch • Espace cut • B fader • Échap : pause")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(hint)
 
     def start(self, song, chart, level):
         self.song, self.chart, self.level = song, chart, level
         self.notes = [{"t": t, "lane": lane, "done": None} for t, lane in chart["notes"][level]]
-        self.pads = [{"t": t, "pad": pad, "done": None} for t, pad in chart.get("pads", [])]
         zones = chart.get("zones", {})
         self.scratch_zones = [{"t": t, "dur": d, "hits": 0, "last_dir": 0} for t, d in zones.get("scratch", [])]
         self.fader_zones = [{"t": t, "dur": d} for t, d in zones.get("fader", [])]
@@ -318,9 +277,6 @@ class Game(QWidget):
                 note["done"] = "raté"
                 self.combo = 0
                 self.flash = ("RATÉ", "#ff4136", time.monotonic())
-        for pad in self.pads:  # pad manqué : on l'efface, mais c'est un bonus -> aucune punition
-            if not pad["done"] and pad["t"] < now - MISS:
-                pad["done"] = "loupé"
         # Volume en direct : « cut » (coupe nette ~90ms) + « fader » (creux en V tant qu'on tient B).
         vol = 1.0
         if self.cut_until > time.monotonic():
@@ -352,19 +308,6 @@ class Game(QWidget):
         if event.isAutoRepeat() or self.countdown or getattr(self, "paused", False):
             return
         now = self.now()
-        pad = next((i for i, key in enumerate(PAD_KEYS) if event.key() == key), None)
-        if pad is not None:
-            self.pad_pressed_at[pad] = time.monotonic()
-            self.pad_sounds[pad].play()  # le son part dès qu'on tape (satisfaisant, hit ou pas)
-            hits = [n for n in self.pads if not n["done"] and n["pad"] == pad and abs(n["t"] - now) <= GOOD]
-            if hits:  # pile sur le cue = bonus (jamais de punition si on tape à côté)
-                note = min(hits, key=lambda n: abs(n["t"] - now))
-                note["done"] = "pad"
-                self.combo += 1
-                self.best_combo = max(self.best_combo, self.combo)
-                self.score += 75 * self.multiplier()
-                self.flash = ("PAD !", PAD_COLORS[pad].name(), time.monotonic())
-            return
         # --- Scratch : alterner G / H pendant une zone de scratch ---
         if event.key() in SCRATCH_KEYS:
             direction = 1 if event.key() == SCRATCH_KEYS[0] else -1

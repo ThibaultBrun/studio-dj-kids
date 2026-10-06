@@ -102,17 +102,6 @@ def main():
             notes.sort()
         charts[level] = notes
 
-    # Pads : des « sons à envoyer » sur les accents les plus forts et bien isolés (1 toutes les ~2 mesures).
-    # 4 sons qui tournent (0=corne, 1=scratch, 2=zap, 3=boom). Optionnel : le jeu les ignore s'il n'y en a pas.
-    pads = []
-    last_pad, idx, t = -10.0, 0, start
-    while t < end:
-        pos = round((t - first_bar) / sixteenth) % 16
-        if pos % 4 == 0 and max(strength(lane, t) for lane in range(3)) >= 0.9 and (t - last_pad) >= 1.5 * bar:
-            pads.append([round(t - start, 3), idx % 4])
-            idx, last_pad = idx + 1, t
-        t += sixteenth
-
     # Zones avancées (façon DJ Hero), placées par rapport au refrain :
     #   scratch = 2 mesures de build AVANT le refrain ; fader = 1 mesure à l'ENTRÉE du refrain ;
     #   cut = 2 mesures DANS le refrain, avec un « cut » à couper sur chaque temps.
@@ -130,7 +119,7 @@ def main():
             beats = [round(c0 + b * (bar / 4), 3) for b in range(8)]
             zones["cut"].append({"start": round(c0, 3), "dur": round(2 * bar, 3), "beats": beats})
 
-    print(json.dumps({"notes": charts, "pads": pads, "zones": zones, "start": round(start, 3),
+    print(json.dumps({"notes": charts, "zones": zones, "start": round(start, 3),
                       "end": round(end, 3), "bpm": info["bpm"]}), flush=True)
 
 
