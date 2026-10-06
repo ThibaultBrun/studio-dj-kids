@@ -38,9 +38,14 @@ PAD_KEYS = [Qt.Key.Key_A, Qt.Key.Key_S, Qt.Key.Key_E, Qt.Key.Key_R]
 PAD_NAMES = ["airhorn", "scratch", "zap", "boom"]
 PAD_LABELS = ["A", "S", "E", "R"]
 PAD_COLORS = [QColor("#ffb300"), QColor("#8e44ff"), QColor("#00d0c0"), QColor("#ff4fd8")]
+# Zones avancées (façon DJ Hero). Touches dédiées pour ne pas gêner les lanes ← ↓ → :
+SCRATCH_KEYS = (Qt.Key.Key_G, Qt.Key.Key_H)  # alterner pour scratcher
+FADER_KEY = Qt.Key.Key_B                      # à tenir pendant la zone fader
+CUT_KEY = Qt.Key.Key_Space                    # couper le son sur le temps
 SOUNDS_DIR = APP_DIR / "sounds"
 PERFECT, GOOD, MISS = 0.06, 0.12, 0.15  # fenêtres de tir (s)
 AUDIO_LATENCY = 0.06  # le son sort un peu après ce que dit le lecteur
+CHART_VERSION = 2  # à augmenter quand charter.py change : les anciens charts sont refaits
 LEAD_IN = 2.5  # secondes avant la première note
 
 STYLE = """
@@ -172,6 +177,22 @@ class Highway(QWidget):
                 painter.setFont(QFont(self.font().family(), 16, QFont.Weight.Bold))
                 painter.drawText(QRectF(cx - pad_w * 0.4, pad_y - 18, pad_w * 0.8, 36),
                                  Qt.AlignmentFlag.AlignCenter, PAD_LABELS[i])
+        # Bannière de zone (scratch / fader / cut) : active, ou qui arrive dans ~1.5 s
+        banner = None
+        for zone in getattr(game, "scratch_zones", []):
+            if zone["t"] - 1.5 <= now <= zone["t"] + zone["dur"]:
+                active = now >= zone["t"]
+                banner = (f"🎧 SCRATCH !  G ↔ H   (x{zone['hits']})" if active else "🎧 Prépare-toi : SCRATCH", "#8e44ff")
+        for zone in getattr(game, "fader_zones", []):
+            if zone["t"] - 1.5 <= now <= zone["t"] + zone["dur"]:
+                banner = ("🎚 FADER !  tiens B" if now >= zone["t"] else "🎚 Prépare-toi : FADER", "#00d0c0")
+        for zone in getattr(game, "cut_zones", []):
+            if zone["t"] - 1.5 <= now <= zone["t"] + zone["dur"]:
+                banner = ("✂ CUT !  Espace sur le temps" if now >= zone["t"] else "✂ Prépare-toi : CUT", "#ff4136")
+        if banner:
+            painter.setPen(QColor(banner[1]))
+            painter.setFont(QFont(self.font().family(), 26, QFont.Weight.Black))
+            painter.drawText(QRectF(0, h * 0.06, w, 50), Qt.AlignmentFlag.AlignCenter, banner[0])
         # Message (Parfait / Bien / Raté)
         if game.flash and time.monotonic() - game.flash[2] < 0.5:
             text, color, _ = game.flash
@@ -213,6 +234,13 @@ class Game(QWidget):
             effect.setSource(QUrl.fromLocalFile(str(SOUNDS_DIR / f"{name}.wav")))
             effect.setVolume(0.9)
             self.pad_sounds.append(effect)
+        # Zones avancées (scratch / fader / cut)
+        self.scratch_zones, self.fader_zones, self.cut_zones = [], [], []
+        self.fader_held = False
+        self.cut_until = 0.0
+        self.scratch_sound = QSoundEffect(self)
+        self.scratch_sound.setSource(QUrl.fromLocalFile(str(SOUNDS_DIR / "scratch.wav")))
+        self.scratch_sound.setVolume(0.9)
 
         root = QVBoxLayout(self)
         top = QHBoxLayout()
@@ -229,7 +257,7 @@ class Game(QWidget):
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         root.addWidget(self.progress)
-        hint = QLabel("Tape ← ↓ → sur les notes • A S E R = envoie des sons (pads) • Échap : pause")
+        hint = QLabel("← ↓ → notes • A S E R pads • G↔H scratch • Espace cut • B fader • Échap : pause")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(hint)
 
@@ -237,6 +265,14 @@ class Game(QWidget):
         self.song, self.chart, self.level = song, chart, level
         self.notes = [{"t": t, "lane": lane, "done": None} for t, lane in chart["notes"][level]]
         self.pads = [{"t": t, "pad": pad, "done": None} for t, pad in chart.get("pads", [])]
+        zones = chart.get("zones", {})
+        self.scratch_zones = [{"t": t, "dur": d, "hits": 0, "last_dir": 0} for t, d in zones.get("scratch", [])]
+        self.fader_zones = [{"t": t, "dur": d} for t, d in zones.get("fader", [])]
+        self.cut_zones = [{"t": z["start"], "dur": z["dur"],
+                           "beats": [{"t": b, "done": None} for b in z["beats"]]} for z in zones.get("cut", [])]
+        self.fader_held = False
+        self.cut_until = 0.0
+        self.audio.setVolume(1.0)
         self.score = self.combo = self.best_combo = 0
         self.flash = None
         self.length = chart["end"] - chart["start"]
@@ -285,6 +321,17 @@ class Game(QWidget):
         for pad in self.pads:  # pad manqué : on l'efface, mais c'est un bonus -> aucune punition
             if not pad["done"] and pad["t"] < now - MISS:
                 pad["done"] = "loupé"
+        # Volume en direct : « cut » (coupe nette ~90ms) + « fader » (creux en V tant qu'on tient B).
+        vol = 1.0
+        if self.cut_until > time.monotonic():
+            vol = 0.12
+        for zone in self.fader_zones:
+            if self.fader_held and zone["t"] <= now <= zone["t"] + zone["dur"]:
+                frac = (now - zone["t"]) / max(0.01, zone["dur"])
+                duck = 1 - (1 - abs(2 * frac - 1)) * 0.85  # plonge à ~0.15 au milieu puis remonte
+                vol = min(vol, duck)
+                self.score += 2  # on « ride » le fader -> petit bonus régulier
+        self.audio.setVolume(max(0.0, min(1.0, vol)))
         self.progress.setValue(int(max(0, min(1, now / self.length)) * 100))
         self.update_labels()
         self.highway.update()
@@ -304,11 +351,11 @@ class Game(QWidget):
             return
         if event.isAutoRepeat() or self.countdown or getattr(self, "paused", False):
             return
+        now = self.now()
         pad = next((i for i, key in enumerate(PAD_KEYS) if event.key() == key), None)
         if pad is not None:
             self.pad_pressed_at[pad] = time.monotonic()
             self.pad_sounds[pad].play()  # le son part dès qu'on tape (satisfaisant, hit ou pas)
-            now = self.now()
             hits = [n for n in self.pads if not n["done"] and n["pad"] == pad and abs(n["t"] - now) <= GOOD]
             if hits:  # pile sur le cue = bonus (jamais de punition si on tape à côté)
                 note = min(hits, key=lambda n: abs(n["t"] - now))
@@ -317,6 +364,33 @@ class Game(QWidget):
                 self.best_combo = max(self.best_combo, self.combo)
                 self.score += 75 * self.multiplier()
                 self.flash = ("PAD !", PAD_COLORS[pad].name(), time.monotonic())
+            return
+        # --- Scratch : alterner G / H pendant une zone de scratch ---
+        if event.key() in SCRATCH_KEYS:
+            direction = 1 if event.key() == SCRATCH_KEYS[0] else -1
+            zone = next((z for z in self.scratch_zones if z["t"] - 0.1 <= now <= z["t"] + z["dur"]), None)
+            if zone and direction != zone["last_dir"]:
+                zone["last_dir"] = direction
+                zone["hits"] += 1
+                self.scratch_sound.play()
+                self.score += 20 * self.multiplier()
+                self.flash = ("SCRATCH !", "#8e44ff", time.monotonic())
+            return
+        # --- Cut : Espace, couper le son sur le temps ---
+        if event.key() == CUT_KEY:
+            for zone in self.cut_zones:
+                hits = [b for b in zone["beats"] if not b["done"] and abs(b["t"] - now) <= GOOD]
+                if hits:
+                    min(hits, key=lambda b: abs(b["t"] - now))["done"] = "cut"
+                    self.cut_until = time.monotonic() + 0.09  # gate le son ~90 ms
+                    self.combo += 1
+                    self.best_combo = max(self.best_combo, self.combo)
+                    self.score += 60 * self.multiplier()
+                    self.flash = ("CUT !", "#ff4136", time.monotonic())
+            return
+        # --- Fader : tenir B pendant la zone ---
+        if event.key() == FADER_KEY:
+            self.fader_held = True
             return
         lane = next((i for i, keys in enumerate(LANE_KEYS) if event.key() in keys), None)
         if lane is None:
@@ -333,6 +407,10 @@ class Game(QWidget):
         self.best_combo = max(self.best_combo, self.combo)
         self.score += (100 if perfect else 50) * self.multiplier()
         self.flash = ("PARFAIT !", "#2ecc40", time.monotonic()) if perfect else ("BIEN", "#ffe14f", time.monotonic())
+
+    def keyReleaseEvent(self, event):
+        if event.key() == FADER_KEY and not event.isAutoRepeat():
+            self.fader_held = False
 
     def toggle_pause(self):
         if self.countdown:
@@ -503,7 +581,7 @@ class DefisDJ(QWidget):
     def make_chart(self, info):
         try:
             chart = json.loads(self.chart_file(self.song).read_text())
-            if chart.get("mtime") == info["mtime"]:
+            if chart.get("mtime") == info["mtime"] and chart.get("version", 1) >= CHART_VERSION:
                 return self.start_game(chart)
         except (OSError, ValueError):
             pass
@@ -520,7 +598,7 @@ class DefisDJ(QWidget):
             self.wait_label.setText("😕 Oups, je n'ai pas réussi à préparer les notes.")
             QTimer.singleShot(2500, lambda: self.stack.setCurrentIndex(0))
             return
-        chart["mtime"] = info["mtime"]
+        chart["mtime"], chart["version"] = info["mtime"], CHART_VERSION
         save_json(self.chart_file(self.song), chart)
         self.start_game(chart)
 

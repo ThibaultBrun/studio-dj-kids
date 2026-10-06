@@ -113,8 +113,25 @@ def main():
             idx, last_pad = idx + 1, t
         t += sixteenth
 
-    print(json.dumps({"notes": charts, "pads": pads, "start": round(start, 3), "end": round(end, 3),
-                      "bpm": info["bpm"]}), flush=True)
+    # Zones avancées (façon DJ Hero), placées par rapport au refrain :
+    #   scratch = 2 mesures de build AVANT le refrain ; fader = 1 mesure à l'ENTRÉE du refrain ;
+    #   cut = 2 mesures DANS le refrain, avec un « cut » à couper sur chaque temps.
+    # Le jeu les ignore si absentes (rétro-compatible).
+    span = end - start
+    chorus_rel = (chorus or start) - start
+    zones = {"scratch": [], "fader": [], "cut": []}
+    if 0 <= chorus_rel <= span:
+        if chorus_rel - 2 * bar >= 0:
+            zones["scratch"].append([round(chorus_rel - 2 * bar, 3), round(2 * bar, 3)])
+        if chorus_rel + bar <= span:
+            zones["fader"].append([round(chorus_rel, 3), round(bar, 3)])
+        c0 = chorus_rel + 2 * bar
+        if c0 + 2 * bar <= span:
+            beats = [round(c0 + b * (bar / 4), 3) for b in range(8)]
+            zones["cut"].append({"start": round(c0, 3), "dur": round(2 * bar, 3), "beats": beats})
+
+    print(json.dumps({"notes": charts, "pads": pads, "zones": zones, "start": round(start, 3),
+                      "end": round(end, 3), "bpm": info["bpm"]}), flush=True)
 
 
 if __name__ == "__main__":
