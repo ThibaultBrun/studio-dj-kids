@@ -106,7 +106,10 @@ for f in "$REPO"/desktop/*.desktop; do
         *) cp "$target" "$DESKTOP/" ;;
     esac
 done
-cp /usr/share/applications/org.mixxx.Mixxx.desktop /usr/share/applications/org.hydrogenmusic.Hydrogen.desktop "$DESKTOP/"
+# Mixxx écrit tout de suite ses messages dans son journal : Bip y voit les morceaux chargés (« Qu'est-ce qui va avec ? »)
+sed 's#^Exec=mixxx#Exec=mixxx --log-flush-level warning#' /usr/share/applications/org.mixxx.Mixxx.desktop \
+    > "$CHILD_HOME/.local/share/applications/org.mixxx.Mixxx.desktop"
+cp "$CHILD_HOME/.local/share/applications/org.mixxx.Mixxx.desktop" /usr/share/applications/org.hydrogenmusic.Hydrogen.desktop "$DESKTOP/"
 # Projet LMMS de départ ouvert par « Faire des beats »
 install -D -o "$CHILD" -g "$CHILD" -m 644 "$REPO/lmms/Mon-premier-beat.mmp" "$CHILD_HOME/lmms/projects/Mon-premier-beat.mmp"
 for app in tuxpaint tuxmath org.kde.ktouch org.stellarium.Stellarium org.kde.kgeography org.kde.marble \

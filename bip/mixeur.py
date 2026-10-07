@@ -287,6 +287,56 @@ class Resolver(QObject):
         self.failed.emit(f"Je n'ai pas trouvé « {query} » 😕 Essaie avec le nom de l'artiste en plus !")
 
 
+class SongDownload(QObject):
+    """Cherche une chanson (sa musique d'abord, puis YouTube) et la télécharge dans sa musique, comme pour un mix."""
+    progress = pyqtSignal(float, str)   # pourcentage, texte
+    finished = pyqtSignal(object, str)  # chemin du MP3 (None si raté), message
+
+    def __init__(self, query, parent=None):
+        super().__init__(parent)
+        self.query = query
+        self.item = None
+        self.tries = 0
+        self.proc = None
+
+    def start(self):
+        self.progress.emit(0, "🔎 Je cherche la chanson…")
+        self.resolver = Resolver([self.query], min_duration=60, parent=self)
+        self.resolver.resolved.connect(self.resolved)
+        self.resolver.failed.connect(lambda message: self.finished.emit(None, message))
+        self.resolver.start()
+
+    def resolved(self, found):
+        self.item = found[0][0]
+        if "path" in self.item:  # elle était déjà là
+            self.finished.emit(self.item["path"], "Elle est déjà dans ta musique ! 😉")
+            return
+        self.download()
+
+    def download(self):
+        self.tries += 1
+        self.proc = mm.download_process(self.item["video_id"])
+        self.proc.readyReadStandardOutput.connect(self.download_output)
+        self.proc.finished.connect(self.download_done)
+        self.proc.start()
+
+    def download_output(self):
+        for line in bytes(self.proc.readAllStandardOutput()).decode(errors="replace").splitlines():
+            progress = mm.parse_progress(line)
+            if progress:
+                self.progress.emit(*progress)
+
+    def download_done(self):
+        final = mm.finalize_download(self.item["video_id"])
+        if final:
+            self.finished.emit(final, "C'est dans ta musique ! 🎉")
+        elif self.tries < MAX_TRIES:
+            self.progress.emit(0, "🔁 Nouvel essai…")
+            self.download()
+        else:
+            self.finished.emit(None, "Le téléchargement n'a pas marché 😕 Réessaie dans un moment.")
+
+
 class MixJob(QObject):
     """Prépare un mix : télécharge ce qui manque, ouvre Mixxx, synchronise via le contrôleur virtuel."""
     status = pyqtSignal(str, bool)   # texte, à dire à voix haute ?

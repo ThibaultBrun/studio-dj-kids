@@ -10,13 +10,28 @@ Bip.WAIT_STEP_MS = 500;
 Bip.WAIT_MAX_MS = 45000;      // temps max pour charger et analyser les deux morceaux
 Bip.TRANSITION_MS = 8000;     // durée du fondu enchaîné automatique
 Bip.TRANSITION_STEPS = 40;
+Bip.DECK_FIRST_CHECK_MS = 1000;  // Mixxx donne le tempo du nouveau morceau juste après « chargé »
+Bip.DECK_WAIT_MAX_MS = 60000;    // un morceau jamais analysé : Mixxx cherche son tempo et sa tonalité
 
 Bip.busy = false;
 // Réglages du mashup, envoyés par Ma Musique juste avant l'ordre « prépare »
 Bip.mashup = {shift: 0, leader: 2, startHigh: [0, 0, 0], start: [0, 0, 0]};
+// Numéro du dernier chargement de chaque platine (pour oublier un morceau remplacé entre-temps)
+Bip.deckLoads = [0, 0, 0];
 
 Bip.init = function() {
     Bip.busy = false;
+    // « Qu'est-ce qui va avec ? » : à chaque morceau chargé, Bip reçoit son tempo et sa tonalité
+    [1, 2].forEach(function(deck) {
+        engine.makeConnection("[Channel" + deck + "]", "track_loaded", function(value) {
+            if (value > 0) {
+                Bip.announceDeck(deck);
+            }
+        });
+        if (Bip.loaded(deck)) {
+            Bip.announceDeck(deck);
+        }
+    });
 };
 
 Bip.shutdown = function() {};
@@ -27,6 +42,30 @@ Bip.say = function(message) {
 
 Bip.loaded = function(deck) {
     return engine.getValue("[Channel" + deck + "]", "track_loaded") > 0;
+};
+
+// Écrit « BIP:DECK 1 bpm=120.00 key=22 duration=215.3 » dans le journal de Mixxx.
+// key : tonalité de Mixxx (1 = Do majeur … 12 = Si majeur, 13 = Do mineur … 24 = Si mineur, 0 = inconnue).
+// On attend que Mixxx connaisse le tempo et la tonalité (un morceau jamais analysé prend quelques secondes).
+Bip.announceDeck = function(deck) {
+    var group = "[Channel" + deck + "]";
+    var load = ++Bip.deckLoads[deck];
+    var waited = Bip.DECK_FIRST_CHECK_MS;
+    var check = function() {
+        if (load !== Bip.deckLoads[deck] || !Bip.loaded(deck)) {
+            return;  // un autre morceau est arrivé sur cette platine entre-temps
+        }
+        var bpm = engine.getValue(group, "file_bpm");
+        var key = engine.getValue(group, "file_key");
+        if ((bpm <= 0 || key <= 0) && waited < Bip.DECK_WAIT_MAX_MS) {
+            waited += Bip.WAIT_STEP_MS;
+            engine.beginTimer(Bip.WAIT_STEP_MS, check, true);
+            return;
+        }
+        Bip.say("DECK " + deck + " bpm=" + bpm.toFixed(2) + " key=" + Math.round(key) +
+                " duration=" + engine.getValue(group, "duration").toFixed(1));
+    };
+    engine.beginTimer(Bip.DECK_FIRST_CHECK_MS, check, true);
 };
 
 Bip.ready = function(deck) {

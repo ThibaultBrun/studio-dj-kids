@@ -9,6 +9,7 @@ import json
 import re
 import shlex
 import sys
+import time
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,7 @@ from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkReques
 from PyQt6.QtWidgets import (QApplication, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                              QStackedWidget, QTextBrowser, QVBoxLayout, QWidget)
 
+import ca_va_avec
 import mixeur
 from voix import Listener, Speaker, complete_sentences
 
@@ -162,8 +164,21 @@ class Bip(QWidget):
         self.mix_page = self.make_mix_menu()
         self.help_page = self.make_help()
         self.chat_page = self.make_chat()
-        for page in (self.menu_page, self.mix_page, self.help_page, self.chat_page):
+        self.match_page = ca_va_avec.CaVaAvecPage(self.back_button())
+        for page in (self.menu_page, self.mix_page, self.help_page, self.chat_page, self.match_page):
             self.pages.addWidget(page)
+
+        # « Qu'est-ce qui va avec ? » : Bip guette les morceaux chargés dans Mixxx
+        self.deck_watcher = ca_va_avec.LogWatcher(parent=self)
+        self.deck_watcher.loaded.connect(self.on_deck_loaded)
+        self.deck_watcher.start()
+        if mixeur.mixxx_running():
+            self.match_page.set_decks(self.deck_watcher.decks)
+        # … et découvre des tubes en arrière-plan (jamais pendant que Mixxx joue)
+        self.tubes = ca_va_avec.TubesBuilder(self)
+        self.tubes.progress.connect(self.on_tubes_progress)
+        self.tubes.changed.connect(self.on_tubes_changed)
+        self.next_tubes_check = time.time() + 30
 
         # Les boutons pour piloter Mixxx n'apparaissent que quand il est ouvert
         self.mixxx_timer = QTimer(self)
@@ -229,6 +244,11 @@ class Bip(QWidget):
         label = QLabel("🎛 Dans Mixxx :")
         label.setObjectName("question")
         mixxx.addWidget(label)
+        match = QPushButton("🎧 Qu'est-ce qui va avec ?")
+        match.setObjectName("mixxx")
+        match.setToolTip("Des chansons qui vont bien avec celle de ta platine")
+        match.clicked.connect(lambda: self.pages.setCurrentWidget(self.match_page))
+        mixxx.addWidget(match)
         row = QHBoxLayout()
         transition = QPushButton("⏭ Enchaîner")
         transition.setObjectName("mixxx")
@@ -409,6 +429,9 @@ class Bip(QWidget):
             line = next(l for l in desktop.read_text().splitlines() if l.startswith("Exec="))
             # Les codes %f, %U… des raccourcis (fichiers à ouvrir) ne servent pas ici
             program, *args = [a for a in shlex.split(line[5:]) if not a.startswith("%")]
+            if desktop_name == "org.mixxx.Mixxx" and "--log-flush-level" not in args:
+                # Sinon Mixxx garde ses messages en mémoire et Bip ne voit pas tout de suite les morceaux chargés
+                args += ["--log-flush-level", "warning"]
         except (OSError, StopIteration, ValueError):
             self.say_on_menu("Oups, je ne trouve pas ce logiciel 😕 Demande à papa.")
             return
@@ -421,7 +444,32 @@ class Bip(QWidget):
 
     # --- Mixxx ---
     def update_mixxx_buttons(self):
-        self.mixxx_box.setVisible(mixeur.mixxx_running())
+        running = mixeur.mixxx_running()
+        self.mixxx_box.setVisible(running)
+        # Les tubes s'analysent quand Mixxx est fermé : le son de Mixxx ne doit jamais craquer
+        if running and self.tubes.running():
+            self.tubes.stop()
+            self.match_page.set_builder_text("Je découvrirai d'autres tubes quand Mixxx sera fermé 😉")
+        elif not running and not self.tubes.running() and time.time() >= self.next_tubes_check:
+            self.next_tubes_check = time.time() + 600
+            self.tubes.start()
+
+    # --- Qu'est-ce qui va avec ? ---
+    def on_deck_loaded(self, info):
+        self.match_page.deck_loaded(info)
+        busy = self.mix_job or self.reply or self.choosing or self.pending_mix
+        if not busy:  # pas pendant que Bip prépare un mix : il a des choses à dire dans la discussion
+            self.pages.setCurrentWidget(self.match_page)
+
+    def on_tubes_progress(self, done, total):
+        self.match_page.set_builder_text(f"🔎 Je découvre des tubes… ({done}/{total})" if done < total else "")
+
+    def on_tubes_changed(self):
+        if not self.tubes.running():
+            self.match_page.set_builder_text("")
+        # Pas de mise à jour sous les yeux de l'enfant, sauf si la liste des tubes est encore vide
+        if self.pages.currentWidget() is not self.match_page or not self.match_page.tube_rows:
+            self.match_page.refresh()
 
     def mixxx_transition(self):
         mixeur.send_midi(mixeur.CC_TRANSITION)
@@ -865,6 +913,7 @@ class Bip(QWidget):
         # Libère la mémoire du PC quand Bip est fermé
         self.speaker.stop()
         self.listener.stop()
+        self.tubes.stop()
         reply = self.post("/api/generate", {"model": MODEL, "keep_alive": 0})
         reply.finished.connect(QApplication.quit)
         QTimer.singleShot(3000, QApplication.quit)
