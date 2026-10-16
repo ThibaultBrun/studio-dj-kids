@@ -24,7 +24,8 @@ from PyQt6 import sip
 from PyQt6.QtCore import QByteArray, QProcess, QProcessEnvironment, Qt, QTimer, QUrl, QUrlQuery
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtNetwork import QLocalSocket, QNetworkAccessManager, QNetworkReply, QNetworkRequest
-from PyQt6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+from PyQt6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu,
+                             QMessageBox,
                              QPushButton, QScrollArea, QTabWidget, QVBoxLayout, QWidget)
 
 HOME = Path.home()
@@ -57,6 +58,8 @@ QPushButton#watch:hover { background: #2e7d32; }
 QPushButton#ask { background: #e91e63; }
 QPushButton#ask:hover { background: #c2185b; }
 QPushButton#channel { background: #5c6bc0; font-size: 17px; }
+QPushButton#small { background: #ff9800; padding: 8px 12px; }
+QPushButton#small:hover { background: #f57c00; }
 QPushButton#channel:checked { background: #43a047; border: 4px solid #ffeb3b; }
 QTabWidget::pane { border: none; }
 QTabBar::tab { font-size: 20px; font-weight: bold; padding: 12px 34px; margin-right: 6px;
@@ -263,7 +266,7 @@ def picture(images, url, w, h, blur=False, round_=False):
 class Tile(QFrame):
     """Une vidéo : grosse miniature, titre, chaîne, badge et bouton « Regarder »."""
 
-    def __init__(self, video, images, on_watch, allowed=True, blur=False, badge=True):
+    def __init__(self, video, images, on_watch, allowed=True, blur=False, badge=True, actions=()):
         super().__init__()
         self.setObjectName("tile")
         lay = QVBoxLayout(self)
@@ -289,6 +292,12 @@ class Tile(QFrame):
         watch.clicked.connect(lambda: on_watch(video))
         if show_badge:
             bottom.addWidget(badge)
+        for label, tip, callback in actions:  # ⭐ favori, ➕ playlist, 🗑️ retirer…
+            btn = QPushButton(label)
+            btn.setObjectName("small")
+            btn.setToolTip(tip)
+            btn.clicked.connect(lambda _, c=callback, b=btn: c(video, b))
+            bottom.addWidget(btn)
         bottom.addStretch()
         bottom.addWidget(watch)
         lay.addLayout(bottom)
@@ -332,6 +341,8 @@ class MesVideos(QWidget):
         self.playlists = cached.get("playlists", [])
         self.single_videos = cached.get("single_videos", [])
         self.requests = cached.get("requests", [])
+        self.lists = cached.get("lists", [])
+        self.current_list = "favoris"
         self.blur = cached.get("blur", True)
         self.results = []
         self.filter = None  # chaîne choisie dans « Mes chaînes », ou None = toutes
@@ -380,6 +391,24 @@ class MesVideos(QWidget):
         lay.addWidget(self.videos_scroll, 1)
         self.tabs.addTab(channels_page, "📺 Mes chaînes")
 
+        # --- Mes playlists ---
+        lists_page = QWidget()
+        lay = QVBoxLayout(lists_page)
+        self.list_bar = QHBoxLayout()
+        row = QWidget()
+        row.setLayout(self.list_bar)
+        row_scroll = QScrollArea()
+        row_scroll.setWidget(row)
+        row_scroll.setWidgetResizable(True)
+        row_scroll.setFixedHeight(84)
+        row_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        lay.addWidget(row_scroll)
+        self.list_tools = QHBoxLayout()
+        lay.addLayout(self.list_tools)
+        self.lists_scroll = grid_page()
+        lay.addWidget(self.lists_scroll, 1)
+        self.tabs.addTab(lists_page, "⭐ Mes playlists")
+
         # --- Mes demandes ---
         self.requests_scroll = grid_page()
         self.tabs.addTab(self.requests_scroll, "📨 Mes demandes")
@@ -400,6 +429,7 @@ class MesVideos(QWidget):
         self.build_search()
         self.build_channels()
         self.build_requests()
+        self.build_lists()
         if not self.server.ok():
             self.status.setText("⚠️ Mes Vidéos n'est pas encore réglée : demande à Papa.")
         else:
@@ -417,11 +447,13 @@ class MesVideos(QWidget):
         if video.get("channel_id") in self.allowed_ids():
             return True
         playable = {v["video_id"] for v in self.videos} | {v.get("video_id") for v in self.single_videos}
+        playable |= {i.get("video_id") for lst in self.lists if lst.get("owner") == "papa" for i in lst.get("items", [])}
         return video.get("video_id") in playable
 
     def save_cache(self):
         save_json(CACHE_FILE, {"videos": self.videos, "channels": self.channels, "playlists": self.playlists,
-                               "single_videos": self.single_videos, "requests": self.requests, "blur": self.blur})
+                               "single_videos": self.single_videos, "requests": self.requests, "blur": self.blur,
+                               "lists": self.lists})
 
     def refresh(self):
         if not self.server.ok():
@@ -430,6 +462,7 @@ class MesVideos(QWidget):
         self.load_allowed()
         self.server.get("/videos", self.got_videos, {"limit": 200})
         self.load_requests()
+        self.load_lists()
 
     def load_allowed(self):
         def done(data):
@@ -490,8 +523,11 @@ class MesVideos(QWidget):
         self.build_search()
 
     def build_search(self):
-        tiles = [Tile(v, self.images, self.watch, allowed=self.is_allowed(v) or bool(v.get("allowed")),
-                      blur=self.blur) for v in self.results]
+        tiles = []
+        for v in self.results:
+            ok = self.is_allowed(v) or bool(v.get("allowed"))
+            tiles.append(Tile(v, self.images, self.watch, allowed=ok, blur=self.blur,
+                              actions=self.video_actions() if ok and self.lists else ()))
         fill_grid(self.search_scroll, tiles, "Tape ce que tu veux regarder, puis appuie sur « 🔍 Chercher ».")
 
     # --- Mes chaînes ---
@@ -521,12 +557,145 @@ class MesVideos(QWidget):
             known = {v["video_id"] for v in self.videos}
             shown = [v for v in self.videos if (v.get("via") or {}).get("kind") == "video"]
             shown += [v for v in self.single_videos if v["video_id"] not in known]
-        fill_grid(self.videos_scroll, [Tile(v, self.images, self.watch, badge=False) for v in shown],
+        fill_grid(self.videos_scroll, [Tile(v, self.images, self.watch, badge=False,
+                                            actions=self.video_actions() if self.lists else ()) for v in shown],
                   "Pas encore de chaîne.\nCherche une vidéo dans « 🔍 Chercher » et demande à Papa !")
 
     def choose(self, channel_id):
         self.filter = channel_id
         self.build_channels()
+
+    # --- Mes playlists et favoris (gardés sur le serveur : Papa peut les voir et en créer) ---
+    def load_lists(self):
+        if self.server.ok():
+            self.server.get("/lists", self.got_lists)
+
+    def got_lists(self, data):
+        if data and isinstance(data.get("lists"), list):
+            self.lists = data["lists"]
+            self.save_cache()
+            self.build_lists()
+            self.build_channels()
+            self.build_search()
+
+    def own_lists(self):
+        return [lst for lst in self.lists if not lst.get("locked")]
+
+    def favorites(self):
+        return next((lst for lst in self.lists if lst.get("id") == "favoris"), {"items": []})
+
+    def video_actions(self):
+        return [("⭐", "Mettre dans mes favoris", self.toggle_favorite),
+                ("➕", "Ajouter à une playlist", self.add_menu)]
+
+    def list_call(self, path, body, ok_text):
+        def done(code, data):
+            if code == 200:
+                self.status.setText(ok_text)
+            else:
+                self.status.setText((data or {}).get("error") or "😕 Ça n'a pas marché, réessaie plus tard.")
+            self.load_lists()
+        self.server.post(path, body, done)
+
+    @staticmethod
+    def item(video):
+        return {"video_id": video["video_id"], "title": video.get("title", ""), "channel_id": video.get("channel_id", ""),
+                "channel_title": video.get("channel_title", ""), "thumbnail": video.get("thumbnail") or ""}
+
+    def toggle_favorite(self, video, _button=None):
+        if any(i.get("video_id") == video["video_id"] for i in self.favorites().get("items", [])):
+            self.list_call("/lists/remove", {"list_id": "favoris", "video_id": video["video_id"]},
+                           "☆ Enlevée de tes favoris")
+        else:
+            self.list_call("/lists/add", {"list_id": "favoris", **self.item(video)}, "⭐ Ajoutée à tes favoris !")
+
+    def add_menu(self, video, button):
+        menu = QMenu(self)
+        menu.setStyleSheet("QMenu { font-size: 18px; } QMenu::item { padding: 10px 24px; }")
+        for lst in self.own_lists():
+            if lst.get("id") != "favoris":
+                menu.addAction(f"📃 {lst.get('name', '')}").triggered.connect(
+                    lambda _, i=lst["id"], n=lst.get("name", ""): self.list_call(
+                        "/lists/add", {"list_id": i, **self.item(video)}, f"➕ Ajoutée à « {n} »"))
+        menu.addSeparator()
+        menu.addAction("✨ Nouvelle playlist…").triggered.connect(lambda: self.new_list(video))
+        menu.exec(button.mapToGlobal(button.rect().bottomLeft()))
+
+    def new_list(self, video=None):
+        name, ok = QInputDialog.getText(self, "Nouvelle playlist", "Comment s'appelle ta playlist ?")
+        name = name.strip()[:40]
+        if not ok or not name:
+            return
+
+        def done(code, data):
+            if code == 200 and data and data.get("list"):
+                self.current_list = data["list"]["id"]
+                if video:
+                    self.list_call("/lists/add", {"list_id": data["list"]["id"], **self.item(video)},
+                                   f"✨ Playlist « {name} » créée avec ta vidéo !")
+                    return
+                self.status.setText(f"✨ Playlist « {name} » créée !")
+            else:
+                self.status.setText((data or {}).get("error") or "😕 Je n'ai pas pu créer la playlist.")
+            self.load_lists()
+        self.server.post("/lists", {"name": name}, done)
+
+    def rename_list(self, lst):
+        name, ok = QInputDialog.getText(self, "Renommer", "Nouveau nom :", text=lst.get("name", ""))
+        if ok and name.strip():
+            self.list_call("/lists/rename", {"id": lst["id"], "name": name.strip()[:40]}, "✏️ C'est renommé !")
+
+    def delete_list(self, lst):
+        if QMessageBox.question(self, "Supprimer", f"Supprimer la playlist « {lst.get('name', '')} » ?") \
+                == QMessageBox.StandardButton.Yes:
+            self.current_list = "favoris"
+            self.list_call("/lists/delete", {"id": lst["id"]}, "🗑️ Playlist supprimée")
+
+    def build_lists(self):
+        clear(self.list_bar)
+        clear(self.list_tools)
+        if not self.lists:
+            fill_grid(self.lists_scroll, [], "Les playlists arrivent bientôt !")
+            return
+        if self.current_list not in {lst.get("id") for lst in self.lists}:
+            self.current_list = self.lists[0].get("id")
+        for lst in self.lists:
+            icon = "⭐" if lst.get("id") == "favoris" else ("🎁" if lst.get("owner") == "papa" else "📃")
+            name = lst.get("name", "").lstrip("⭐📃🎁 ")
+            btn = QPushButton(f"{icon} {name} ({len(lst.get('items', []))})")
+            btn.setObjectName("channel")
+            btn.setCheckable(True)
+            btn.setChecked(lst.get("id") == self.current_list)
+            btn.setMinimumHeight(52)
+            btn.clicked.connect(lambda _, i=lst.get("id"): self.choose_list(i))
+            self.list_bar.addWidget(btn)
+        self.list_bar.addStretch()
+        lst = next(lst for lst in self.lists if lst.get("id") == self.current_list)
+        new = QPushButton("✨ Nouvelle playlist")
+        new.clicked.connect(lambda: self.new_list())
+        self.list_tools.addWidget(new)
+        if lst.get("owner") == "papa":
+            note = QLabel("🎁 Une playlist préparée par Papa")
+            note.setObjectName("big")
+            self.list_tools.addWidget(note)
+        elif lst.get("id") != "favoris" and not lst.get("locked"):
+            rename = QPushButton("✏️ Renommer")
+            rename.clicked.connect(lambda: self.rename_list(lst))
+            delete = QPushButton("🗑️ Supprimer")
+            delete.setObjectName("ask")
+            delete.clicked.connect(lambda: self.delete_list(lst))
+            self.list_tools.addWidget(rename)
+            self.list_tools.addWidget(delete)
+        self.list_tools.addStretch()
+        remove = () if lst.get("locked") else (("🗑️", "Enlever de la playlist", lambda v, _b, i=lst["id"]: self.list_call(
+            "/lists/remove", {"list_id": i, "video_id": v["video_id"]}, "🗑️ Enlevée de la playlist")),)
+        items = [{**i, "video_id": i.get("video_id") or i.get("id")} for i in lst.get("items", [])]
+        fill_grid(self.lists_scroll, [Tile(v, self.images, self.watch, badge=False, actions=remove) for v in items],
+                  "Ta liste est vide.\nAppuie sur ⭐ ou ➕ sous une vidéo pour l'ajouter ici !")
+
+    def choose_list(self, list_id):
+        self.current_list = list_id
+        self.build_lists()
 
     # --- Mes demandes ---
     def load_requests(self):
@@ -622,7 +791,7 @@ class MesVideos(QWidget):
                 self.load_allowed()
             elif code == 200:
                 self.status.setText("📨 C'est envoyé ! Papa va regarder ta demande.")
-                self.tabs.setCurrentIndex(2)
+                self.tabs.setCurrentIndex(3)
             elif code == 0 or code >= 500:
                 self.server.send("/request", body)  # pas de réseau : la demande partira plus tard
                 self.status.setText("📨 Pas d'Internet pour l'instant : ta demande partira toute seule plus tard.")
