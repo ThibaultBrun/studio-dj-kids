@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from PyQt6.QtCore import QProcess, QProcessEnvironment, QSize, Qt, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
@@ -17,6 +18,8 @@ from PyQt6.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel, QLineEd
 
 import mixxx_db
 from bibliotheque import HOME, MUSIC_DIR, SECONDS_PER_SECOND, music_text, read_song, stems_of
+
+MIXXX_KIDS = Path(__file__).resolve().parent.parent / "mixxx" / "mixxx-kids"
 
 sys.path.insert(0, str(HOME / ".local/share/bip"))
 
@@ -720,11 +723,11 @@ class MashupWizard(QDialog):
         if mixeur.MIXXX_LOG.exists():
             mixeur.MIXXX_LOG.replace(mixeur.MIXXX_LOG.with_suffix(".log.avant-bip"))
         proc = QProcess()
-        proc.setProgram("mixxx")
+        proc.setProgram(str(MIXXX_KIDS))  # range la bibliothèque puis lance Mixxx
         env = QProcessEnvironment.systemEnvironment()
         env.remove("QT_QPA_PLATFORM")
         proc.setProcessEnvironment(env)
-        proc.setArguments(["--log-flush-level", "warning", str(self.deck_file(0)), str(self.deck_file(1))])
+        proc.setArguments([str(self.deck_file(0)), str(self.deck_file(1))])
         proc.setStandardOutputFile(QProcess.nullDevice())
         proc.setStandardErrorFile(QProcess.nullDevice())
         proc.startDetached()

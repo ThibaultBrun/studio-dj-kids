@@ -1,0 +1,5 @@
+#!/bin/bash
+# Lance Mixxx pour Studio DJ Kids : range d'abord la bibliothèque (pistes séparées cachées quand la
+# version Stems existe), puis Mixxx avec le journal écrit tout de suite (Bip y lit les morceaux chargés).
+python3 -I "$(dirname "$(readlink -f "$0")")/cacher_pistes.py" || true
+exec mixxx --log-flush-level warning "$@"

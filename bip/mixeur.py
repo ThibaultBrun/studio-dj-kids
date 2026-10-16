@@ -15,6 +15,8 @@ APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(HOME / ".local/share/ma-musique"))
 import ma_musique as mm  # noqa: E402  (on réutilise la recherche et le téléchargement de Ma Musique)
 
+MIXXX_KIDS = Path(__file__).resolve().parent.parent / "mixxx" / "mixxx-kids"
+
 AMBIANCES_FILE = APP_DIR / "ambiances.md"
 MIXXX_DIR = HOME / ".mixxx"
 MIXXX_CFG = MIXXX_DIR / "mixxx.cfg"
@@ -413,11 +415,11 @@ class MixJob(QObject):
         if MIXXX_LOG.exists():
             MIXXX_LOG.replace(MIXXX_LOG.with_suffix(".log.avant-bip"))  # pour ne lire que les nouveaux messages
         mixxx = QProcess()
-        mixxx.setProgram("mixxx")
+        mixxx.setProgram(str(MIXXX_KIDS))  # range la bibliothèque puis lance Mixxx
         env = QProcessEnvironment.systemEnvironment()
         env.remove("QT_QPA_PLATFORM")  # Mixxx doit toujours s'afficher, même si Bip a été lancé sans écran
         mixxx.setProcessEnvironment(env)
-        mixxx.setArguments(["--log-flush-level", "warning", *map(str, self.files)])
+        mixxx.setArguments([*map(str, self.files)])
         mixxx.setStandardOutputFile(QProcess.nullDevice())
         mixxx.setStandardErrorFile(QProcess.nullDevice())
         mixxx.startDetached()  # Mixxx continue de tourner même si Bip est fermé

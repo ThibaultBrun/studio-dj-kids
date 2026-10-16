@@ -109,7 +109,7 @@ for f in "$REPO"/desktop/*.desktop; do
     esac
 done
 # Mixxx écrit tout de suite ses messages dans son journal : Bip y voit les morceaux chargés (« Qu'est-ce qui va avec ? »)
-sed 's#^Exec=mixxx#Exec=mixxx --log-flush-level warning#' /usr/share/applications/org.mixxx.Mixxx.desktop \
+sed "s#^Exec=mixxx#Exec=$REPO/mixxx/mixxx-kids#" /usr/share/applications/org.mixxx.Mixxx.desktop \
     > "$CHILD_HOME/.local/share/applications/org.mixxx.Mixxx.desktop"
 cp "$CHILD_HOME/.local/share/applications/org.mixxx.Mixxx.desktop" /usr/share/applications/org.hydrogenmusic.Hydrogen.desktop "$DESKTOP/"
 # Projet LMMS de départ ouvert par « Faire des beats »

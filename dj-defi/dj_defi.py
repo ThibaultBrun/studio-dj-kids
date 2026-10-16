@@ -43,6 +43,32 @@ SCRATCH_BEATS = {"facile": 2, "moyen": 1, "expert": 0.5}  # une flèche tous les
 FADER_KEY = Qt.Key.Key_B                      # à tenir pendant la zone fader
 CUT_KEY = Qt.Key.Key_Space                    # couper le son sur le temps
 SOUNDS_DIR = APP_DIR / "sounds"
+# Vrai son de scratch : le « Ahh » des samples Serato (bac Scratch de Mixxx), joué à l'endroit quand on pousse
+# le jog et à l'envers quand on le tire. Sans ce sample, on garde le son synthétique de sounds/scratch.wav.
+SCRATCH_SAMPLE = HOME / "Musique/Samples Scratch/Serato/SeratoScratchSampleAhh.mp3"
+SCRATCH_CACHE = DATA / "defis-dj-scratch"
+SCRATCH_FILTERS = {  # un bout de « Ahh », un peu accéléré (poussée) ou ralenti et retourné (retour)
+    "avant": "silenceremove=start_periods=1:start_threshold=-40dB,atrim=0:0.30,asetrate=44100*1.12,"
+             "aresample=44100,afade=t=in:d=0.008,afade=t=out:st=0.21:d=0.06",
+    "arriere": "silenceremove=start_periods=1:start_threshold=-40dB,atrim=0:0.30,areverse,asetrate=44100*0.92,"
+               "aresample=44100,afade=t=in:d=0.008,afade=t=out:st=0.26:d=0.06",
+}
+
+
+def scratch_sounds():
+    """(son quand on pousse, son quand on tire) : fichiers .wav, faits une seule fois à partir du sample."""
+    fallback = SOUNDS_DIR / "scratch.wav"
+    if not SCRATCH_SAMPLE.exists():
+        return fallback, fallback
+    SCRATCH_CACHE.mkdir(parents=True, exist_ok=True)
+    out = {}
+    for name, chain in SCRATCH_FILTERS.items():
+        target = SCRATCH_CACHE / f"{name}.wav"
+        if not target.exists():
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(SCRATCH_SAMPLE), "-af", chain, "-ac", "2",
+                            "-ar", "44100", str(target)], timeout=20)
+        out[name] = target if target.exists() else fallback
+    return out["avant"], out["arriere"]
 PERFECT, GOOD, MISS = 0.06, 0.12, 0.15  # fenêtres de tir (s)
 AUDIO_LATENCY = 0.06  # le son sort un peu après ce que dit le lecteur
 CHART_VERSION = 2  # à augmenter quand charter.py change : les anciens charts sont refaits
@@ -299,9 +325,12 @@ class Game(QWidget):
         self.scratch_zones, self.fader_zones, self.cut_zones = [], [], []
         self.fader_held = False
         self.cut_until = 0.0
-        self.scratch_sound = QSoundEffect(self)
-        self.scratch_sound.setSource(QUrl.fromLocalFile(str(SOUNDS_DIR / "scratch.wav")))
-        self.scratch_sound.setVolume(0.9)
+        self.scratch_sounds = {}
+        for direction, path in zip((1, -1), scratch_sounds()):
+            sound = QSoundEffect(self)
+            sound.setSource(QUrl.fromLocalFile(str(path)))
+            sound.setVolume(0.9)
+            self.scratch_sounds[direction] = sound
 
         root = QVBoxLayout(self)
         top = QHBoxLayout()
@@ -481,7 +510,7 @@ class Game(QWidget):
     def scratch(self, direction):
         now = self.now()
         self.pressed_at[SCRATCH_LANE] = time.monotonic()
-        self.scratch_sound.play()  # le scratch s'entend toujours, même à côté
+        self.scratch_sounds[direction].play()  # le scratch s'entend toujours, même à côté
         arrows = [a for z in self.scratch_zones for a in z["arrows"]
                   if not a["done"] and a["dir"] == direction and abs(a["t"] - now) <= GOOD]
         if arrows:
