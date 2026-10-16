@@ -49,7 +49,7 @@ CHART_VERSION = 2  # à augmenter quand charter.py change : les anciens charts s
 LEAD_IN = 2.5  # secondes avant la première note
 # --- La platine (Hercules DJControl Inpulse) : lue avec aseqdump, sans gêner Mixxx ---
 DECK_NAME = "DJControl"
-PAD_CHANNELS = range(6, 10)    # canaux MIDI des pads (platine gauche et droite, tous les modes)
+PAD_CHANNELS = range(6, 10)    # canaux MIDI des pads (platine gauche et droite, avec ou sans SHIFT)
 JOG_CHANNELS = {2, 3}          # canaux des deux jog wheels
 JOG_CC = {9, 10}               # 10 = jog touché (scratch), 9 = jog pas touché
 CROSSFADER = (1, 0)            # (canal, contrôleur)
@@ -254,7 +254,7 @@ class Deck:
                 continue
             kind, ch, num, val = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
             if kind == "Note on" and val > 0 and ch in PAD_CHANNELS:
-                self.on_pad(num % 8 % 4)  # pads 1 à 4, quel que soit le mode de pads
+                self.on_pad(num % 8)  # pads 1 à 8 (1-4 puis 5-8), quel que soit le mode de pads
             elif kind == "Control change" and ch in JOG_CHANNELS and num in JOG_CC:
                 step = val if val < 64 else val - 128  # 1 = un cran en avant, 127 = un cran en arrière
                 if step == 0:
@@ -327,14 +327,14 @@ class Game(QWidget):
 
     def lane_hint(self, lane):
         if self.deck:
-            return ["Pads 1-2", "Pads 3-4"][lane] if self.lanes == 2 else f"Pad {lane + 1}"
+            return ["Pads 1-4", "Pads 5-8"][lane]
         return (["←", "→"] if self.lanes == 2 else LANE_HINTS)[lane]
 
     # --- Les gestes de la platine ---
     def deck_pad(self, pad):
         if self.paused_or_waiting():
             return
-        self.hit_lane(pad // 2 if self.lanes == 2 else min(pad, 2))
+        self.hit_lane(0 if pad < 4 else 1)  # pads 1-4 : voie de gauche, pads 5-8 : voie de droite
 
     def deck_scratch(self, direction):
         if not self.paused_or_waiting():
