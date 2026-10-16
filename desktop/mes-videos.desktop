@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mes Vidéos
+Comment=Les vidéos YouTube des chaînes choisies avec Papa, sans pubs
+Exec=python3 /home/djpiloupilou/.local/share/mes-videos/mes_videos.py
+Icon=video-television
+Terminal=false
+Categories=AudioVideo;Video;
+StartupWMClass=mes-videos

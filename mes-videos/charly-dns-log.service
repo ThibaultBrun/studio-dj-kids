@@ -1,0 +1,12 @@
+[Unit]
+Description=Studio DJ Kids : historique des sites visités par l'enfant (domaines + heures)
+After=systemd-resolved.service network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 -I /usr/local/sbin/charly-dns-log @CHILD@
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

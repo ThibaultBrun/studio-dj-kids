@@ -14,7 +14,7 @@ CHILD_HOME=$(getent passwd "$CHILD" | cut -d: -f6)
 as_child() { sudo -u "$CHILD" -H bash -c "$1"; }
 
 echo ">> Paquets"
-apt-get install -y -qq mixxx ffmpeg curl unzip git build-essential cmake alsa-utils \
+apt-get install -y -qq mixxx ffmpeg mpv curl unzip git build-essential cmake alsa-utils \
     python3-pyqt6 python3-mutagen libfluidsynth3 fluid-soundfont-gm avldrums.lv2-soundfont musescore-general-soundfont-lossless \
     lmms hydrogen gcompris-qt tuxpaint tuxmath ktouch stellarium kgeography marble kturtle khangman blinken
 
@@ -92,6 +92,7 @@ ln -sfn '$REPO/ma-musique' ~/.local/share/ma-musique
 ln -sfn '$REPO/bip' ~/.local/share/bip
 ln -sfn /opt/mon-studio ~/.local/share/mon-studio
 ln -sfn '$REPO/dj-defi' ~/.local/share/dj-defi
+ln -sfn '$REPO/mes-videos' ~/.local/share/mes-videos
 cp '$REPO'/icons/*.svg ~/.local/share/icons/ma-musique-web/
 ln -sf '$REPO/mixxx/Bip.midi.xml' '$REPO/mixxx/Bip-scripts.js' ~/.mixxx/controllers/
 ln -sf '$REPO/mixxx/Hercules-Inpulse-200-MK2-StudioDJKids.midi.xml' '$REPO/mixxx/Hercules-Inpulse-200-guide.js' ~/.mixxx/controllers/
@@ -135,4 +136,5 @@ kwriteconfig6 --file kwinrulesrc --group bip-sidebar --key above --delete
 kwriteconfig6 --file kwinrulesrc --group bip-sidebar --key aboverule --delete
 '
 
+echo ">> Mes Vidéos : lancez ensuite scripts/install-mes-videos.sh (jeton du serveur Charly Guard)"
 echo ">> Terminé. Ouvrez Mixxx une première fois depuis le compte $CHILD pour créer sa configuration."
