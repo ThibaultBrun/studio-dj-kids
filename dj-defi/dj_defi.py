@@ -254,7 +254,7 @@ class Deck:
                 continue
             kind, ch, num, val = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4))
             if kind == "Note on" and val > 0 and ch in PAD_CHANNELS:
-                self.on_pad(num % 8)  # pads 1 à 8 (1-4 puis 5-8), quel que soit le mode de pads
+                self.on_pad(0 if ch % 2 == 0 else 1)  # pads de la platine gauche (1-4) ou droite (5-8)
             elif kind == "Control change" and ch in JOG_CHANNELS and num in JOG_CC:
                 step = val if val < 64 else val - 128  # 1 = un cran en avant, 127 = un cran en arrière
                 if step == 0:
@@ -327,14 +327,14 @@ class Game(QWidget):
 
     def lane_hint(self, lane):
         if self.deck:
-            return ["Pads 1-4", "Pads 5-8"][lane]
+            return ["Pads gauche", "Pads droite"][lane]
         return (["←", "→"] if self.lanes == 2 else LANE_HINTS)[lane]
 
     # --- Les gestes de la platine ---
-    def deck_pad(self, pad):
+    def deck_pad(self, side):
         if self.paused_or_waiting():
             return
-        self.hit_lane(0 if pad < 4 else 1)  # pads 1-4 : voie de gauche, pads 5-8 : voie de droite
+        self.hit_lane(side if self.lanes == 2 else side * 2)  # platine gauche : voie de gauche, droite : droite
 
     def deck_scratch(self, direction):
         if not self.paused_or_waiting():
