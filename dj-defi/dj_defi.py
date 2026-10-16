@@ -50,9 +50,9 @@ LEAD_IN = 2.5  # secondes avant la première note
 # --- La platine (Hercules DJControl Inpulse) : lue avec aseqdump, sans gêner Mixxx ---
 DECK_NAME = "DJControl"
 PAD_CHANNELS = range(6, 10)    # canaux MIDI des pads (platine gauche et droite, avec ou sans SHIFT)
-JOG_CHANNELS = {2, 3}          # canaux des deux jog wheels
+JOG_CHANNELS = {1, 2}          # canaux des deux jog wheels (comme aseqdump les compte : à partir de 0)
 JOG_CC = {9, 10}               # 10 = jog touché (scratch), 9 = jog pas touché
-CROSSFADER = (1, 0)            # (canal, contrôleur)
+CROSSFADER = (0, 0)            # (canal, contrôleur)
 JOG_STEP = 6                   # crans de jog dans un sens pour compter un coup de scratch
 JOG_GAP = 0.18                 # s : au-delà, on repart de zéro
 
