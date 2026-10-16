@@ -1,0 +1,10 @@
+[Unit]
+Description=Studio DJ Kids : vérifie les horaires de l'enfant chaque minute
+
+[Timer]
+OnBootSec=30
+OnCalendar=*-*-* *:*:05
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

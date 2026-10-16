@@ -1,0 +1,7 @@
+[Unit]
+Description=Studio DJ Kids : horaires de l'enfant (réglés depuis la page admin Charly Guard)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/sbin/charly-horaires @CHILD@

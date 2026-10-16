@@ -33,6 +33,14 @@ systemctl daemon-reload
 systemctl enable --now charly-dns-log.service
 systemctl restart charly-dns-log.service
 
+echo ">> Horaires réglés depuis la page admin (remplacent le couvre-feu fixe 8h-20h)"
+install -m 755 "$REPO/mes-videos/charly-horaires.py" /usr/local/sbin/charly-horaires
+sed "s#@CHILD@#$CHILD#" "$REPO/mes-videos/charly-horaires.service" > /etc/systemd/system/charly-horaires.service
+install -m 644 "$REPO/mes-videos/charly-horaires.timer" /etc/systemd/system/charly-horaires.timer
+systemctl daemon-reload
+systemctl disable --now charly-couvre-feu-avertir.timer charly-couvre-feu-fermer.timer 2>/dev/null || true
+systemctl enable --now charly-horaires.timer
+
 echo ">> Appli et raccourci"
 sudo -u "$CHILD" -H ln -sfn "$REPO/mes-videos" "$CHILD_HOME/.local/share/mes-videos"
 DESKTOP=$(sudo -u "$CHILD" -H xdg-user-dir DESKTOP)
