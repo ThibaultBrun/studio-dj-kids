@@ -3,7 +3,7 @@
 
 - « Chercher » : une vraie recherche YouTube, faite par le serveur Charly Guard (pas par Firefox).
   Les chaînes pas encore autorisées ont un badge et une miniature floutée (réglable par les parents).
-  « Regarder » lit la vidéo si la chaîne est autorisée ; sinon on peut « Demander à papa ».
+  « Regarder » lit la vidéo si la chaîne est autorisée ; sinon on peut « Demander l’accès ».
 - « Mes chaînes » : les dernières vidéos des chaînes autorisées.
 - « Mes demandes » : en attente, oui ou non.
 La lecture se fait avec mpv + yt-dlp, sans pubs ni recommandations (YouTube reste bloqué dans Firefox).
@@ -555,8 +555,8 @@ class MesVideos(QWidget):
         box = QMessageBox(self)
         box.setWindowTitle("Mes Vidéos")
         box.setText(f"La chaîne « {video.get('channel_title', '')} » n'est pas encore autorisée.\n\n"
-                    "Tu veux demander à Papa ?")
-        ask = box.addButton("🙋 Demander à papa", QMessageBox.ButtonRole.AcceptRole)
+                    "Tu veux demander l'accès ?")
+        ask = box.addButton("🙋 Demander l'accès", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Non merci", QMessageBox.ButtonRole.RejectRole)
         ask.setObjectName("ask")
         box.setStyleSheet(STYLE)
