@@ -95,7 +95,8 @@ ln -sfn '$REPO/dj-defi' ~/.local/share/dj-defi
 ln -sfn '$REPO/mes-videos' ~/.local/share/mes-videos
 cp '$REPO'/icons/*.svg ~/.local/share/icons/ma-musique-web/
 ln -sf '$REPO/mixxx/Bip.midi.xml' '$REPO/mixxx/Bip-scripts.js' ~/.mixxx/controllers/
-ln -sf '$REPO/mixxx/Hercules-Inpulse-200-MK2-StudioDJKids.midi.xml' '$REPO/mixxx/Hercules-Inpulse-200-guide.js' ~/.mixxx/controllers/
+ln -sf '$REPO/mixxx/Hercules-Inpulse-200-MK2-StudioDJKids.midi.xml' '$REPO/mixxx/Hercules-Inpulse-200-guide.js' \
+       '$REPO/mixxx/Hercules-Inpulse-200-stems.js' '$REPO/mixxx/Hercules-Inpulse-200-Mk3.js' ~/.mixxx/controllers/
 "
 DESKTOP=$(sudo -u "$CHILD" -H xdg-user-dir DESKTOP)
 for f in "$REPO"/desktop/*.desktop; do
