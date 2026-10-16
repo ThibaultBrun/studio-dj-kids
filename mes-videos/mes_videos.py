@@ -821,7 +821,9 @@ class MesVideos(QWidget):
             "--fs", "--force-window=immediate", "--no-terminal", "--keep-open=no",
             f"--title=📺 {video.get('title', '')}",
             f"--input-ipc-server={SOCKET}",
-            "--ytdl-format=bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+            # la piste audio en français quand la vidéo est doublée, sinon la piste d'origine
+            "--ytdl-format=bestvideo[height<=720]+bestaudio[language^=fr]/bestvideo[height<=720]+bestaudio"
+            "/best[height<=720]/best",
             f"--script-opts=ytdl_hook-ytdl_path={YTDLP}",
             f"--ytdl-raw-options=js-runtimes=deno:{DENO},no-playlist=",
             f"https://www.youtube.com/watch?v={video['video_id']}",
