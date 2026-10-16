@@ -41,6 +41,15 @@ def original_of(folder):
     return None
 
 
+def title_of(original, folder):
+    try:
+        from mutagen import File as AudioFile
+        tags = AudioFile(original, easy=True).tags or {}
+        return (tags.get("title") or [folder.name])[0]
+    except Exception:
+        return folder.name
+
+
 def stem_file(folder, part):
     for ext in AUDIO_EXT:
         f = folder / f"{folder.name} ({part}){ext}"
@@ -84,7 +93,7 @@ def add_manifest(path):
 
 def build(folder):
     original = original_of(folder)
-    out = OUT_DIR / f"{folder.name}.stem.mp4"
+    out = OUT_DIR / f"{folder.name} (Stems).stem.mp4"  # un autre nom que la chanson : on les distingue dans Mixxx
     if out.exists():
         return "déjà fait"
     if not original:
@@ -112,7 +121,7 @@ def build(folder):
         cmd = ["ffmpeg", "-v", "error", "-y", *inputs]
         if filters:
             cmd += ["-filter_complex", ";".join(filters)]
-        cmd += [*maps, "-map_metadata", "0", "-c:a", "aac", "-b:a", "256k", "-ar", "44100", "-ac", "2",
+        cmd += [*maps, "-map_metadata", "0", "-metadata", f"title={title_of(original, folder)} (Stems)", "-c:a", "aac", "-b:a", "256k", "-ar", "44100", "-ac", "2",
                 *[x for k in range(1, 5) for x in (f"-disposition:a:{k}", "0")], "-f", "mp4", str(tmp_out)]
         subprocess.run(cmd, check=True)
         add_manifest(tmp_out)

@@ -1,5 +1,6 @@
 """Ma bibliothèque : écouter ses musiques et les séparer en pistes (voix, batterie, basse…)."""
 import json
+import sys
 from pathlib import Path
 
 from mutagen import File as AudioFile
@@ -17,6 +18,7 @@ MUSIC_DIR = HOME / "Musique"
 STEMS_DIR = MUSIC_DIR / "Pistes séparées"
 SEPARATOR_PY = HOME / ".local/share/separateur/venv/bin/python"
 SEPARER = Path(__file__).resolve().parent / "separer.py"
+STEMS_MIXXX = Path(__file__).resolve().parent / "stems_mixxx.py"
 ANALYSER = Path(__file__).resolve().parent / "analyser.py"
 ANALYSES_FILE = HOME / ".local/share/studio-dj-kids/analyses.json"  # tempo et tonalité trouvés par Ma Musique
 ANALYSIS_VERSION = 2  # version 2 : mesures et refrain en plus
@@ -592,6 +594,8 @@ class Bibliotheque(QWidget):
             self.status.setText(f"🎉 « {row.path.stem} » est découpée ! Écoute les pistes ou glisse-les dans Mixxx.")
             if not self.structure(row.path) and row.path not in self.to_analyse:
                 self.to_analyse.insert(0, row.path)
+            # version « stems » pour Mixxx 2.6 : les boutons 🎤 / ♪ de la platine coupent la voix ou la musique
+            QProcess.startDetached(sys.executable, [str(STEMS_MIXXX), row.path.stem])
         else:
             row.progress.hide()
             row.set_state("error", "❌ Réessayer", enabled=True)
