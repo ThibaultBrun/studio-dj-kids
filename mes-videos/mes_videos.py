@@ -329,6 +329,8 @@ class MesVideos(QWidget):
         cached = load_json(CACHE_FILE, {})
         self.videos = [{**v, "video_id": v.get("video_id") or v.get("id")} for v in cached.get("videos", [])]
         self.channels = cached.get("channels", [])
+        self.playlists = cached.get("playlists", [])
+        self.single_videos = cached.get("single_videos", [])
         self.requests = cached.get("requests", [])
         self.blur = cached.get("blur", True)
         self.results = []
@@ -410,17 +412,40 @@ class MesVideos(QWidget):
     def allowed_ids(self):
         return {c["channel_id"] for c in self.channels}
 
+    def is_allowed(self, video):
+        """Autorisée si sa chaîne l'est, ou la vidéo elle-même, ou une playlist autorisée qui la contient."""
+        if video.get("channel_id") in self.allowed_ids():
+            return True
+        playable = {v["video_id"] for v in self.videos} | {v.get("video_id") for v in self.single_videos}
+        return video.get("video_id") in playable
+
     def save_cache(self):
-        save_json(CACHE_FILE, {"videos": self.videos, "channels": self.channels,
-                               "requests": self.requests, "blur": self.blur})
+        save_json(CACHE_FILE, {"videos": self.videos, "channels": self.channels, "playlists": self.playlists,
+                               "single_videos": self.single_videos, "requests": self.requests, "blur": self.blur})
 
     def refresh(self):
         if not self.server.ok():
             return
         self.server.get("/settings", self.got_settings)
-        self.server.get("/channels", self.got_channels)
+        self.load_allowed()
         self.server.get("/videos", self.got_videos, {"limit": 200})
         self.load_requests()
+
+    def load_allowed(self):
+        def done(data):
+            if data and isinstance(data.get("channels"), list):
+                self.got_allowed(data)
+            else:  # serveur plus ancien : seulement les chaînes
+                self.server.get("/channels", self.got_channels)
+        self.server.get("/allowed", done)
+
+    def got_allowed(self, data):
+        self.channels = data.get("channels") or []
+        self.playlists = data.get("playlists") or []
+        self.single_videos = [{**v, "video_id": v.get("video_id") or v.get("id")} for v in data.get("videos") or []]
+        self.save_cache()
+        self.build_channels()
+        self.build_search()
 
     def got_settings(self, data):
         if data and "blur_unapproved" in data and bool(data["blur_unapproved"]) != self.blur:
@@ -465,26 +490,37 @@ class MesVideos(QWidget):
         self.build_search()
 
     def build_search(self):
-        allowed = self.allowed_ids()
-        tiles = [Tile(v, self.images, self.watch, allowed=v.get("channel_id") in allowed or bool(v.get("allowed")),
+        tiles = [Tile(v, self.images, self.watch, allowed=self.is_allowed(v) or bool(v.get("allowed")),
                       blur=self.blur) for v in self.results]
         fill_grid(self.search_scroll, tiles, "Tape ce que tu veux regarder, puis appuie sur « 🔍 Chercher ».")
 
     # --- Mes chaînes ---
     def build_channels(self):
         clear(self.channel_bar)
-        if self.filter not in self.allowed_ids():
+        filters = [(None, "⭐ Toutes")] + [(("channel", c["channel_id"]), c.get("title", "")) for c in self.channels]
+        filters += [(("playlist", p["playlist_id"]), f"📃 {p.get('title', '')}") for p in self.playlists]
+        if any((v.get("via") or {}).get("kind") == "video" for v in self.videos) or self.single_videos:
+            filters.append((("video", None), "🎬 Vidéos à part"))
+        if self.filter not in [f for f, _ in filters]:
             self.filter = None
-        for channel_id, label in [(None, "⭐ Toutes")] + [(c["channel_id"], c.get("title", "")) for c in self.channels]:
+        for key, label in filters:
             btn = QPushButton(label)
             btn.setObjectName("channel")
             btn.setCheckable(True)
-            btn.setChecked(channel_id == self.filter)
+            btn.setChecked(key == self.filter)
             btn.setMinimumHeight(52)
-            btn.clicked.connect(lambda _, c=channel_id: self.choose(c))
+            btn.clicked.connect(lambda _, k=key: self.choose(k))
             self.channel_bar.addWidget(btn)
         self.channel_bar.addStretch()
-        shown = [v for v in self.videos if self.filter is None or v.get("channel_id") == self.filter]
+        shown = self.videos
+        if self.filter and self.filter[0] == "channel":
+            shown = [v for v in self.videos if v.get("channel_id") == self.filter[1]]
+        elif self.filter and self.filter[0] == "playlist":
+            shown = [v for v in self.videos if (v.get("via") or {}).get("id") == self.filter[1]]
+        elif self.filter:
+            known = {v["video_id"] for v in self.videos}
+            shown = [v for v in self.videos if (v.get("via") or {}).get("kind") == "video"]
+            shown += [v for v in self.single_videos if v["video_id"] not in known]
         fill_grid(self.videos_scroll, [Tile(v, self.images, self.watch, badge=False) for v in shown],
                   "Pas encore de chaîne.\nCherche une vidéo dans « 🔍 Chercher » et demande à Papa !")
 
@@ -507,7 +543,7 @@ class MesVideos(QWidget):
         for r in news:
             self.status.setText(f"{STATUS_TEXT.get(r['status'], '')} pour « {r.get('channel_title', '')} »")
         if any(r.get("status") == "allowed" for r in news):
-            self.server.get("/channels", self.got_channels)
+            self.load_allowed()
             self.server.get("/videos", self.got_videos, {"limit": 200})
         self.build_requests()
 
@@ -521,11 +557,19 @@ class MesVideos(QWidget):
             h = QHBoxLayout(row)
             h.addWidget(picture(self.images, r.get("channel_avatar"), AVATAR, AVATAR, round_=True))
             text = QVBoxLayout()
-            name = QLabel(r.get("channel_title") or "Chaîne")
+            video_only = r.get("kind") == "video"
+            name = QLabel(f"🎬 {r.get('video_title', '')}" if video_only else f"📺 {r.get('channel_title') or 'Chaîne'}")
             name.setObjectName("title")
+            name.setWordWrap(True)
             text.addWidget(name)
-            if r.get("video_title"):
-                vid = QLabel(f"Pour regarder : {r['video_title']}")
+            detail = f"Chaîne : {r.get('channel_title', '')}" if video_only else \
+                (f"Pour regarder : {r['video_title']}" if r.get("video_title") else "")
+            if r.get("status") == "allowed" and r.get("granted") == "video" and not video_only:
+                detail += "\n(Papa a dit oui pour cette vidéo seulement)"
+            elif r.get("status") == "allowed" and r.get("granted") == "channel" and video_only:
+                detail += "\n(Papa a même dit oui pour toute la chaîne !)"
+            if detail:
+                vid = QLabel(detail)
                 vid.setObjectName("channelname")
                 text.addWidget(vid)
             h.addLayout(text, 1)
@@ -543,37 +587,39 @@ class MesVideos(QWidget):
 
     # --- Regarder ou demander ---
     def watch(self, video):
-        if video.get("channel_id") in self.allowed_ids():
+        if self.is_allowed(video) or video.get("allowed"):
             self.play(video)
             return
-        pending = next((r for r in self.requests if r.get("channel_id") == video.get("channel_id")
-                        and r.get("status") == "pending"), None)
+        pending = next((r for r in self.requests if r.get("status") == "pending" and (
+            r.get("kind", "channel") == "channel" and r.get("channel_id") == video.get("channel_id")
+            or r.get("kind") == "video" and r.get("video_id") == video.get("video_id"))), None)
         if pending:
-            QMessageBox.information(self, "Mes Vidéos", f"Tu as déjà demandé « {video.get('channel_title', '')} ».\n"
+            QMessageBox.information(self, "Mes Vidéos", "Tu as déjà demandé l'accès.\n"
                                     "Papa n'a pas encore répondu : regarde dans « 📨 Mes demandes ».")
             return
         box = QMessageBox(self)
         box.setWindowTitle("Mes Vidéos")
-        box.setText(f"La chaîne « {video.get('channel_title', '')} » n'est pas encore autorisée.\n\n"
-                    "Tu veux demander l'accès ?")
-        ask = box.addButton("🙋 Demander l'accès", QMessageBox.ButtonRole.AcceptRole)
+        box.setText(f"« {video.get('title', '')} »\nn'est pas encore autorisée.\n\nTu veux demander l'accès ?")
+        one = box.addButton("🎬 Juste cette vidéo", QMessageBox.ButtonRole.AcceptRole)
+        whole = box.addButton(f"📺 Toute la chaîne {video.get('channel_title', '')}", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Non merci", QMessageBox.ButtonRole.RejectRole)
-        ask.setObjectName("ask")
         box.setStyleSheet(STYLE)
         box.exec()
-        if box.clickedButton() is ask:
-            self.ask(video)
+        if box.clickedButton() is one:
+            self.ask(video, "video")
+        elif box.clickedButton() is whole:
+            self.ask(video, "channel")
 
-    def ask(self, video):
-        body = {"channel_id": video.get("channel_id", ""), "channel_title": video.get("channel_title", ""),
+    def ask(self, video, kind="channel"):
+        body = {"kind": kind, "channel_id": video.get("channel_id", ""), "channel_title": video.get("channel_title", ""),
                 "channel_avatar": video.get("channel_avatar") or "", "video_id": video.get("video_id", ""),
                 "video_title": video.get("title", ""), "video_thumbnail": video.get("thumbnail") or ""}
         self.status.setText("📨 J'envoie ta demande…")
 
         def done(code, data):
             if code == 200 and data and data.get("status") == "allowed":
-                self.status.setText("✅ Bonne nouvelle : cette chaîne est déjà autorisée !")
-                self.server.get("/channels", self.got_channels)
+                self.status.setText("✅ Bonne nouvelle : c'est déjà autorisé !")
+                self.load_allowed()
             elif code == 200:
                 self.status.setText("📨 C'est envoyé ! Papa va regarder ta demande.")
                 self.tabs.setCurrentIndex(2)
