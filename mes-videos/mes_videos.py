@@ -43,6 +43,11 @@ POLL_MS = 5000
 COLUMNS = 3
 THUMB_W, THUMB_H = 336, 189
 AVATAR = 64
+# La piste audio en français quand la vidéo est doublée, sinon la piste d'origine.
+# 2e essai en H.264 : YouTube refuse parfois un flux au hasard (erreur 403).
+FORMATS = ["bestvideo[height<=720]+bestaudio[language^=fr]/bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+           "bestvideo[height<=720][vcodec^=avc1]+bestaudio[language^=fr]/bestvideo[height<=720][vcodec^=avc1]+bestaudio"
+           "/best[height<=720]/best"]
 STATUS_TEXT = {"pending": "⏳ Papa n'a pas encore répondu", "allowed": "✅ Papa a dit oui !",
                "denied": "❌ Papa a dit non"}
 
@@ -810,8 +815,12 @@ class MesVideos(QWidget):
         if self.player and self.player.state() != QProcess.ProcessState.NotRunning:
             self.status.setText("▶️ Une vidéo est déjà en train de passer.")
             return
-        self.playing = {"video": video, "started_at": int(time.time() * 1000), "watched": 0}
+        self.playing = {"video": video, "started_at": int(time.time() * 1000), "watched": 0, "tries": 1}
         self.report()
+        self.start_player(video, FORMATS[0])
+        self.status.setText(f"▶️ {video.get('title', '')} (Échap ou Q pour arrêter)")
+
+    def start_player(self, video, fmt):
         env = QProcessEnvironment.systemEnvironment()
         env.insert("PATH", f"{BIN}:{env.value('PATH')}")
         self.player = QProcess(self)
@@ -821,14 +830,11 @@ class MesVideos(QWidget):
             "--fs", "--force-window=immediate", "--no-terminal", "--keep-open=no",
             f"--title=📺 {video.get('title', '')}",
             f"--input-ipc-server={SOCKET}",
-            # la piste audio en français quand la vidéo est doublée, sinon la piste d'origine
-            "--ytdl-format=bestvideo[height<=720]+bestaudio[language^=fr]/bestvideo[height<=720]+bestaudio"
-            "/best[height<=720]/best",
+            f"--ytdl-format={fmt}",
             f"--script-opts=ytdl_hook-ytdl_path={YTDLP}",
             f"--ytdl-raw-options=js-runtimes=deno:{DENO},no-playlist=",
             f"https://www.youtube.com/watch?v={video['video_id']}",
         ])
-        self.status.setText(f"▶️ {video.get('title', '')} (Échap ou Q pour arrêter)")
         self.poll.start(POLL_MS)
 
     def poll_player(self):
@@ -846,9 +852,19 @@ class MesVideos(QWidget):
             if msg.get("request_id") == 1 and isinstance(msg.get("data"), (int, float)) and self.playing:
                 self.playing["watched"] = max(self.playing["watched"], int(msg["data"]))
 
-    def stopped(self):
+    def stopped(self, code=0, _status=None):
         self.poll.stop()
         self.ipc.abort()
+        if self.playing and code != 0 and self.playing["watched"] < 2:
+            if self.playing["tries"] < len(FORMATS):  # la vidéo n'a pas démarré : on réessaie autrement
+                self.playing["tries"] += 1
+                self.status.setText("⏳ YouTube fait des siennes, je réessaie…")
+                self.start_player(self.playing["video"], FORMATS[self.playing["tries"] - 1])
+                return
+            self.report()
+            self.status.setText("😕 Cette vidéo ne veut pas démarrer. Réessaie dans un petit moment.")
+            self.playing = None
+            return
         if self.playing:
             self.report()
             minutes = self.playing["watched"] // 60
